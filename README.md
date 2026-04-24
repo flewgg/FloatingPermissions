@@ -21,14 +21,14 @@ Add the package in Xcode:
    https://github.com/flewgg/FloatingPermissions.git
    ```
 
-3. Use version `0.1.0` or newer.
+3. Use version `0.1.1` or newer.
 4. Add the `FloatingPermissions` product to your app target.
 
 Or add it to `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/flewgg/FloatingPermissions.git", from: "0.1.0")
+    .package(url: "https://github.com/flewgg/FloatingPermissions.git", from: "0.1.1")
 ]
 ```
 
