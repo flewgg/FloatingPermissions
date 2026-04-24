@@ -25,6 +25,9 @@ public final class FloatingPermissionsController: ObservableObject {
 
     private var panel: FloatingDropPanel?
     private var pendingLaunchSourceFrame: CGRect?
+    private(set) var sourceWindowAppearance: NSAppearance?
+    private var previousFrontmostApplicationPID: pid_t?
+    private var previousFrontmostApplicationBundleIdentifier: String?
     private var permissionPollTimer: Timer?
     private var permissionResolutionTask: Task<Void, Never>?
     private var cancellables = Set<AnyCancellable>()
@@ -58,8 +61,10 @@ public final class FloatingPermissionsController: ObservableObject {
     ) {
         closeOtherActivePanelIfNeeded()
 
+        rememberPreviousFrontmostApplication()
         currentPane = pane
         pendingLaunchSourceFrame = sourceFrameInScreen
+        captureSourceWindowAppearance(from: sourceFrameInScreen)
         mergeDroppedApps(with: suggestedAppURLs)
         SystemSettings.open(url: pane.settingsURL)
 
@@ -90,7 +95,7 @@ public final class FloatingPermissionsController: ObservableObject {
         }
     }
 
-    public func closePanel() {
+    public func closePanel(returnToPreviousApp: Bool = false) {
         permissionResolutionTask?.cancel()
         permissionResolutionTask = nil
         stopPermissionPolling()
@@ -98,9 +103,16 @@ public final class FloatingPermissionsController: ObservableObject {
         panel?.close()
         panel = nil
         pendingLaunchSourceFrame = nil
+        sourceWindowAppearance = nil
 
         if Self.activeController === self {
             Self.activeController = nil
+        }
+
+        if returnToPreviousApp {
+            reactivatePreviousFrontmostApplication()
+        } else {
+            clearPreviousFrontmostApplication()
         }
     }
 
@@ -189,6 +201,49 @@ public final class FloatingPermissionsController: ObservableObject {
         if let activeController = Self.activeController, activeController !== self {
             activeController.closePanel()
         }
+    }
+
+    private func rememberPreviousFrontmostApplication() {
+        let frontmostApplication = NSWorkspace.shared.frontmostApplication
+        guard frontmostApplication?.bundleIdentifier != systemSettingsBundleIdentifier else { return }
+        previousFrontmostApplicationPID = frontmostApplication?.processIdentifier
+        previousFrontmostApplicationBundleIdentifier = frontmostApplication?.bundleIdentifier
+    }
+
+    private func reactivatePreviousFrontmostApplication() {
+        defer { clearPreviousFrontmostApplication() }
+
+        if let previousFrontmostApplicationPID,
+           let application = NSRunningApplication(processIdentifier: previousFrontmostApplicationPID) {
+            application.activate()
+            return
+        }
+
+        guard let previousFrontmostApplicationBundleIdentifier else { return }
+        NSRunningApplication.runningApplications(withBundleIdentifier: previousFrontmostApplicationBundleIdentifier)
+            .first?
+            .activate()
+    }
+
+    private func clearPreviousFrontmostApplication() {
+        previousFrontmostApplicationPID = nil
+        previousFrontmostApplicationBundleIdentifier = nil
+    }
+
+    private func captureSourceWindowAppearance(from sourceFrameInScreen: CGRect?) {
+        let visibleWindows = NSApp.windows.filter { window in
+            window.isVisible && window.isMiniaturized == false && window !== panel
+        }
+
+        if let sourceFrameInScreen,
+           sourceFrameInScreen.isEmpty == false,
+           let window = visibleWindows.first(where: { $0.frame.intersects(sourceFrameInScreen) }) {
+            sourceWindowAppearance = window.effectiveAppearance
+            return
+        }
+
+        let window = NSApp.keyWindow ?? NSApp.mainWindow ?? visibleWindows.first
+        sourceWindowAppearance = window?.effectiveAppearance
     }
 
     private func presentPanel(_ panel: FloatingDropPanel?, for settingsFrame: CGRect) {

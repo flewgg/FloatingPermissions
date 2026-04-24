@@ -1,5 +1,6 @@
 import AppKit
 import QuartzCore
+import SwiftUI
 
 @MainActor
 final class FloatingDropPanel: NSPanel {
@@ -38,6 +39,7 @@ final class FloatingDropPanel: NSPanel {
         isMovableByWindowBackground = false
         hidesOnDeactivate = false
         animationBehavior = .none
+        appearance = controller.sourceWindowAppearance
 
         contentView = FloatingDropPanelContentView(
             controller: controller,
@@ -220,7 +222,8 @@ final class FloatingDropPanel: NSPanel {
 
 private final class FloatingDropPanelContentView: NSView {
     private weak var controller: FloatingPermissionsController?
-    private let materialView = NSVisualEffectView()
+    private let backgroundView = NSHostingView(rootView: FloatingDropPanelBackground())
+    private let materialView = NSView()
     private let titleLabel = NSTextField(labelWithString: "")
     private let arrowView = NSImageView()
     private var dragSource: AppDragSourceView?
@@ -239,22 +242,13 @@ private final class FloatingDropPanelContentView: NSView {
     }
 
     private func setup() {
-        materialView.translatesAutoresizingMaskIntoConstraints = false
-        materialView.material = .popover
-        materialView.blendingMode = .behindWindow
-        materialView.state = .active
-        materialView.wantsLayer = true
-        materialView.layer?.cornerRadius = 18
-        materialView.layer?.masksToBounds = true
-        materialView.layer?.borderWidth = 0.5
-        materialView.layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.18).cgColor
-        addSubview(materialView)
+        backgroundView.appearance = controller?.sourceWindowAppearance
+        backgroundView.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(backgroundView)
 
-        let tintView = NSView()
-        tintView.translatesAutoresizingMaskIntoConstraints = false
-        tintView.wantsLayer = true
-        tintView.layer?.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.78).cgColor
-        materialView.addSubview(tintView)
+        materialView.translatesAutoresizingMaskIntoConstraints = false
+        materialView.wantsLayer = false
+        addSubview(materialView)
 
         let backChrome = NSView()
         backChrome.translatesAutoresizingMaskIntoConstraints = false
@@ -290,15 +284,15 @@ private final class FloatingDropPanelContentView: NSView {
             widthAnchor.constraint(equalToConstant: 530),
             heightAnchor.constraint(equalToConstant: 109),
 
+            backgroundView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            backgroundView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            backgroundView.topAnchor.constraint(equalTo: topAnchor),
+            backgroundView.bottomAnchor.constraint(equalTo: bottomAnchor),
+
             materialView.leadingAnchor.constraint(equalTo: leadingAnchor),
             materialView.trailingAnchor.constraint(equalTo: trailingAnchor),
             materialView.topAnchor.constraint(equalTo: topAnchor),
             materialView.bottomAnchor.constraint(equalTo: bottomAnchor),
-
-            tintView.leadingAnchor.constraint(equalTo: materialView.leadingAnchor),
-            tintView.trailingAnchor.constraint(equalTo: materialView.trailingAnchor),
-            tintView.topAnchor.constraint(equalTo: materialView.topAnchor),
-            tintView.bottomAnchor.constraint(equalTo: materialView.bottomAnchor),
 
             backChrome.leadingAnchor.constraint(equalTo: materialView.leadingAnchor, constant: 18),
             backChrome.topAnchor.constraint(equalTo: materialView.topAnchor, constant: 52),
@@ -357,6 +351,17 @@ private final class FloatingDropPanelContentView: NSView {
 
     @objc
     private func backPressed() {
-        controller?.closePanel()
+        controller?.closePanel(returnToPreviousApp: true)
+    }
+}
+
+private struct FloatingDropPanelBackground: View {
+    var body: some View {
+        RoundedRectangle(cornerRadius: 18, style: .continuous)
+            .fill(.thinMaterial)
+            .overlay {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(Color(nsColor: .separatorColor).opacity(0.18), lineWidth: 0.5)
+            }
     }
 }
