@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import QuartzCore
 import SwiftUI
 
@@ -226,7 +227,11 @@ private final class FloatingDropPanelContentView: NSView {
     private let materialView = NSView()
     private let titleLabel = NSTextField(labelWithString: "")
     private let arrowView = NSImageView()
+    private let buttonStack = NSStackView()
+    private let settingsButton = NSButton()
+    private let closeButton = NSButton()
     private var dragSource: AppDragSourceView?
+    private var cancellables = Set<AnyCancellable>()
 
     init(controller: FloatingPermissionsController, frame: NSRect) {
         self.controller = controller
@@ -250,25 +255,6 @@ private final class FloatingDropPanelContentView: NSView {
         materialView.wantsLayer = false
         addSubview(materialView)
 
-        let backChrome = NSView()
-        backChrome.translatesAutoresizingMaskIntoConstraints = false
-        backChrome.wantsLayer = true
-        backChrome.layer?.backgroundColor = NSColor.controlBackgroundColor.withAlphaComponent(0.95).cgColor
-        backChrome.layer?.cornerRadius = 16
-        materialView.addSubview(backChrome)
-
-        let backButton = NSButton()
-        backButton.translatesAutoresizingMaskIntoConstraints = false
-        backButton.isBordered = false
-        backButton.image = NSImage(systemSymbolName: "chevron.left", accessibilityDescription: "Back")
-        backButton.contentTintColor = NSColor.labelColor.withAlphaComponent(0.72)
-        backButton.target = self
-        backButton.action = #selector(backPressed)
-        if let cell = backButton.cell as? NSButtonCell {
-            cell.imagePosition = .imageOnly
-        }
-        backChrome.addSubview(backButton)
-
         arrowView.translatesAutoresizingMaskIntoConstraints = false
         arrowView.image = NSImage(systemSymbolName: "arrow.up", accessibilityDescription: nil)
         arrowView.symbolConfiguration = .init(pointSize: 28, weight: .bold)
@@ -279,6 +265,9 @@ private final class FloatingDropPanelContentView: NSView {
         titleLabel.maximumNumberOfLines = 1
         titleLabel.lineBreakMode = .byTruncatingTail
         materialView.addSubview(titleLabel)
+
+        configureHeaderButtons()
+        materialView.addSubview(buttonStack)
 
         NSLayoutConstraint.activate([
             widthAnchor.constraint(equalToConstant: 530),
@@ -294,16 +283,6 @@ private final class FloatingDropPanelContentView: NSView {
             materialView.topAnchor.constraint(equalTo: topAnchor),
             materialView.bottomAnchor.constraint(equalTo: bottomAnchor),
 
-            backChrome.leadingAnchor.constraint(equalTo: materialView.leadingAnchor, constant: 18),
-            backChrome.topAnchor.constraint(equalTo: materialView.topAnchor, constant: 52),
-            backChrome.widthAnchor.constraint(equalToConstant: 32),
-            backChrome.heightAnchor.constraint(equalToConstant: 32),
-
-            backButton.centerXAnchor.constraint(equalTo: backChrome.centerXAnchor),
-            backButton.centerYAnchor.constraint(equalTo: backChrome.centerYAnchor),
-            backButton.widthAnchor.constraint(equalToConstant: 14),
-            backButton.heightAnchor.constraint(equalToConstant: 14),
-
             arrowView.leadingAnchor.constraint(equalTo: materialView.leadingAnchor, constant: 35),
             arrowView.topAnchor.constraint(equalTo: materialView.topAnchor, constant: 10),
             arrowView.widthAnchor.constraint(equalToConstant: 28),
@@ -311,7 +290,10 @@ private final class FloatingDropPanelContentView: NSView {
 
             titleLabel.leadingAnchor.constraint(equalTo: arrowView.trailingAnchor, constant: 10),
             titleLabel.centerYAnchor.constraint(equalTo: arrowView.centerYAnchor),
-            titleLabel.trailingAnchor.constraint(equalTo: materialView.trailingAnchor, constant: -22)
+            titleLabel.trailingAnchor.constraint(lessThanOrEqualTo: buttonStack.leadingAnchor, constant: -8),
+
+            buttonStack.trailingAnchor.constraint(equalTo: materialView.trailingAnchor, constant: -16),
+            buttonStack.centerYAnchor.constraint(equalTo: arrowView.centerYAnchor)
         ])
     }
 
@@ -330,11 +312,18 @@ private final class FloatingDropPanelContentView: NSView {
         self.dragSource = dragSource
 
         NSLayoutConstraint.activate([
-            dragSource.leadingAnchor.constraint(equalTo: materialView.leadingAnchor, constant: 64),
+            dragSource.leadingAnchor.constraint(equalTo: materialView.leadingAnchor, constant: 21),
             dragSource.trailingAnchor.constraint(equalTo: materialView.trailingAnchor, constant: -21),
             dragSource.topAnchor.constraint(equalTo: materialView.topAnchor, constant: 47),
             dragSource.heightAnchor.constraint(equalToConstant: 43)
         ])
+
+        controller.$isSettingsFrontmost
+            .receive(on: RunLoop.main)
+            .sink { [weak self] isSettingsFrontmost in
+                self?.settingsButton.isHidden = isSettingsFrontmost
+            }
+            .store(in: &cancellables)
     }
 
     private func title(controller: FloatingPermissionsController) -> NSAttributedString {
@@ -349,8 +338,63 @@ private final class FloatingDropPanelContentView: NSView {
         )
     }
 
+    private func configureHeaderButtons() {
+        buttonStack.translatesAutoresizingMaskIntoConstraints = false
+        buttonStack.orientation = .horizontal
+        buttonStack.alignment = .centerY
+        buttonStack.spacing = 3
+
+        configureHeaderButton(
+            settingsButton,
+            symbolName: "gear",
+            pointSize: 15,
+            accessibilityDescription: "Show System Settings",
+            action: #selector(settingsPressed)
+        )
+        configureHeaderButton(
+            closeButton,
+            symbolName: "xmark.circle.fill",
+            pointSize: 18,
+            accessibilityDescription: "Close",
+            action: #selector(closePressed)
+        )
+
+        buttonStack.addArrangedSubview(settingsButton)
+        buttonStack.addArrangedSubview(closeButton)
+    }
+
+    private func configureHeaderButton(
+        _ button: NSButton,
+        symbolName: String,
+        pointSize: CGFloat,
+        accessibilityDescription: String,
+        action: Selector
+    ) {
+        button.translatesAutoresizingMaskIntoConstraints = false
+        button.isBordered = false
+        button.image = NSImage(systemSymbolName: symbolName, accessibilityDescription: accessibilityDescription)
+        button.symbolConfiguration = .init(pointSize: pointSize, weight: .semibold)
+        button.contentTintColor = NSColor.labelColor.withAlphaComponent(0.72)
+        button.target = self
+        button.action = action
+        button.toolTip = accessibilityDescription
+        if let cell = button.cell as? NSButtonCell {
+            cell.imagePosition = .imageOnly
+        }
+
+        NSLayoutConstraint.activate([
+            button.widthAnchor.constraint(equalToConstant: 22),
+            button.heightAnchor.constraint(equalToConstant: 22)
+        ])
+    }
+
     @objc
-    private func backPressed() {
+    private func settingsPressed() {
+        controller?.reopenCurrentSettingsPane()
+    }
+
+    @objc
+    private func closePressed() {
         controller?.closePanel(returnToPreviousApp: true)
     }
 }
