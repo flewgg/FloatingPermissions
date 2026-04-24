@@ -6,7 +6,7 @@ import SwiftUI
 @MainActor
 final class FloatingDropPanel: NSPanel {
     private weak var panelController: FloatingPermissionsController?
-    private let panelSize = NSSize(width: 530, height: 109)
+    private let panelSize = FloatingDropPanelMetrics.panelSize
 
     private let sidebarWidth: CGFloat = 170
     private let settingsInset: CGFloat = 14
@@ -230,7 +230,6 @@ private final class FloatingDropPanelContentView: NSView {
     private let buttonStack = NSStackView()
     private let settingsButton = NSButton()
     private let closeButton = NSButton()
-    private var dragSource: AppDragSourceView?
     private var cancellables = Set<AnyCancellable>()
 
     init(controller: FloatingPermissionsController, frame: NSRect) {
@@ -270,8 +269,8 @@ private final class FloatingDropPanelContentView: NSView {
         materialView.addSubview(buttonStack)
 
         NSLayoutConstraint.activate([
-            widthAnchor.constraint(equalToConstant: 530),
-            heightAnchor.constraint(equalToConstant: 109),
+            widthAnchor.constraint(equalToConstant: FloatingDropPanelMetrics.panelSize.width),
+            heightAnchor.constraint(equalToConstant: FloatingDropPanelMetrics.panelSize.height),
 
             backgroundView.leadingAnchor.constraint(equalTo: leadingAnchor),
             backgroundView.trailingAnchor.constraint(equalTo: trailingAnchor),
@@ -309,7 +308,6 @@ private final class FloatingDropPanelContentView: NSView {
             }
         }
         materialView.addSubview(dragSource)
-        self.dragSource = dragSource
 
         NSLayoutConstraint.activate([
             dragSource.leadingAnchor.constraint(equalTo: materialView.leadingAnchor, constant: 21),
@@ -408,4 +406,8 @@ private struct FloatingDropPanelBackground: View {
                     .stroke(Color(nsColor: .separatorColor).opacity(0.18), lineWidth: 0.5)
             }
     }
+}
+
+private enum FloatingDropPanelMetrics {
+    static let panelSize = NSSize(width: 530, height: 109)
 }

@@ -7,7 +7,6 @@ public final class FloatingPermissionsController: ObservableObject {
     /// The package exposes a single active floating panel at a time so opening
     /// a second floating permission flow closes the previous panel automatically.
     private static var activeController: FloatingPermissionsController?
-    private let systemSettingsBundleIdentifier = "com.apple.systempreferences"
 
     /// Apps currently represented in the floating panel.
     @Published public private(set) var droppedApps: [URL]
@@ -205,7 +204,7 @@ public final class FloatingPermissionsController: ObservableObject {
 
     private func rememberPreviousFrontmostApplication() {
         let frontmostApplication = NSWorkspace.shared.frontmostApplication
-        guard frontmostApplication?.bundleIdentifier != systemSettingsBundleIdentifier else { return }
+        guard frontmostApplication?.bundleIdentifier != SystemSettingsIdentifiers.bundleIdentifier else { return }
         previousFrontmostApplicationPID = frontmostApplication?.processIdentifier
         previousFrontmostApplicationBundleIdentifier = frontmostApplication?.bundleIdentifier
     }
@@ -268,7 +267,7 @@ public final class FloatingPermissionsController: ObservableObject {
 
     private func updateFrontmostAppState() {
         isSettingsFrontmost =
-            NSWorkspace.shared.frontmostApplication?.bundleIdentifier == systemSettingsBundleIdentifier
+            NSWorkspace.shared.frontmostApplication?.bundleIdentifier == SystemSettingsIdentifiers.bundleIdentifier
     }
 
     private func startPermissionPolling() {

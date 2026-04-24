@@ -26,10 +26,7 @@ public enum PermissionStatusRegistry {
 
 private final class PermissionStatusStorage: @unchecked Sendable {
     private let lock = NSLock()
-    private var registeredProviders: [FloatingPermissionPane: any PermissionStatusProviding] = [
-        .accessibility: AccessibilityPermissionStatusProvider(),
-        .inputMonitoring: InputMonitoringPermissionStatusProvider(),
-    ]
+    private var registeredProviders: [FloatingPermissionPane: any PermissionStatusProviding] = [:]
 
     func register(
         provider: any PermissionStatusProviding,
@@ -51,6 +48,15 @@ private final class PermissionStatusStorage: @unchecked Sendable {
     func provider(for pane: FloatingPermissionPane) -> any PermissionStatusProviding {
         lock.lock()
         defer { lock.unlock() }
-        return registeredProviders[pane] ?? UnsupportedPermissionStatusProvider()
+        return registeredProviders[pane] ?? Self.defaultProvider(for: pane)
+    }
+
+    private static func defaultProvider(for pane: FloatingPermissionPane) -> any PermissionStatusProviding {
+        switch pane {
+        case .accessibility:
+            AccessibilityPermissionStatusProvider()
+        case .inputMonitoring:
+            InputMonitoringPermissionStatusProvider()
+        }
     }
 }

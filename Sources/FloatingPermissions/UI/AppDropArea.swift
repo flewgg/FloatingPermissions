@@ -207,17 +207,17 @@ private final class AppBundlePasteboardWriter: NSObject, NSPasteboardWriting {
         [
             .fileURL,
             .URL,
-            NSPasteboard.PasteboardType("NSFilenamesPboardType"),
-            NSPasteboard.PasteboardType("com.apple.pasteboard.promised-file-url"),
+            .legacyFilenames,
+            .promisedFileURL,
             .string
         ]
     }
 
     func pasteboardPropertyList(forType type: NSPasteboard.PasteboardType) -> Any? {
         switch type {
-        case .fileURL, .URL, NSPasteboard.PasteboardType("com.apple.pasteboard.promised-file-url"):
+        case .fileURL, .URL, .promisedFileURL:
             return url.absoluteString
-        case NSPasteboard.PasteboardType("NSFilenamesPboardType"):
+        case .legacyFilenames:
             return [url.path]
         case .string:
             return url.path
@@ -225,4 +225,9 @@ private final class AppBundlePasteboardWriter: NSObject, NSPasteboardWriting {
             return nil
         }
     }
+}
+
+private extension NSPasteboard.PasteboardType {
+    static let legacyFilenames = NSPasteboard.PasteboardType("NSFilenamesPboardType")
+    static let promisedFileURL = NSPasteboard.PasteboardType("com.apple.pasteboard.promised-file-url")
 }

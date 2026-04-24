@@ -2,14 +2,11 @@ import AppKit
 
 @MainActor
 final class SettingsNavigator {
-    private let bundleIdentifier = "com.apple.systempreferences"
-    private let applicationURL = URL(fileURLWithPath: "/System/Applications/System Settings.app")
-
     /// Opens System Settings with a generic deeplink URL.
     @discardableResult
     func openSettings(at url: URL) -> Bool {
         NSWorkspace.shared.openApplication(
-            at: applicationURL,
+            at: SystemSettingsIdentifiers.applicationURL,
             configuration: NSWorkspace.OpenConfiguration()
         ) { _, _ in }
 
@@ -20,7 +17,7 @@ final class SettingsNavigator {
 
     /// Re-activates the running System Settings process if it already exists.
     func activateSettings() {
-        NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier)
+        NSRunningApplication.runningApplications(withBundleIdentifier: SystemSettingsIdentifiers.bundleIdentifier)
             .first?
             .activate()
     }

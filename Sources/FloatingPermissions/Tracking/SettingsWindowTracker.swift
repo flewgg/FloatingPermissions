@@ -13,12 +13,12 @@ final class SettingsWindowTracker {
     /// detection and keeps the floating panel stable.
     private let missingAppThreshold = 12
     private let initialStabilizationBudget: TimeInterval = 1.2
+    private let windowFrameVerticalCompensation: CGFloat = -3
 
     var onFrameChange: ((CGRect) -> Void)?
     var onTrackingEnded: (() -> Void)?
     private(set) var currentFrame: CGRect?
 
-    private let bundleIdentifier = "com.apple.systempreferences"
     private var appObserver: AXObserver?
     private var windowObserver: AXObserver?
     private var observedWindow: AXUIElement?
@@ -292,7 +292,7 @@ final class SettingsWindowTracker {
     /// This prefers a UI-capable instance over prohibited activation-policy
     /// helpers when multiple matching processes exist.
     private func runningSettingsApplication() -> NSRunningApplication? {
-        NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier)
+        NSRunningApplication.runningApplications(withBundleIdentifier: SystemSettingsIdentifiers.bundleIdentifier)
             .max(by: { ($0.activationPolicy == .prohibited ? 0 : 1) < ($1.activationPolicy == .prohibited ? 0 : 1) })
     }
 
@@ -344,9 +344,8 @@ final class SettingsWindowTracker {
 
     /// Converts a global top-left-origin rectangle from CG/AX space into
     /// AppKit screen coordinates by matching the rect to its containing screen.
-    /// The `+ 28` vertical offset is an intentional visual compensation used
-    /// by this package so the floating helper panel sits closer to the visible
-    /// bottom edge of the System Settings window.
+    /// A small vertical compensation keeps the floating helper panel aligned
+    /// with the visible bottom edge of the System Settings window.
     private func appKitFrame(fromGlobalTopLeftFrame frame: CGRect) -> CGRect {
         let screens = NSScreen.screens.compactMap { screen -> (frame: CGRect, cgBounds: CGRect)? in
             guard
@@ -373,7 +372,7 @@ final class SettingsWindowTracker {
 
         return CGRect(
             x: matchedScreen.frame.minX + localX,
-            y: matchedScreen.frame.maxY - localY - frame.height - 3,
+            y: matchedScreen.frame.maxY - localY - frame.height + windowFrameVerticalCompensation,
             width: frame.width,
             height: frame.height
         )
