@@ -10,7 +10,6 @@ can decide whether the guide is needed before showing it.
 
 ## Features
 
-- SwiftUI button for the common "open permission guide" flow.
 - Controller API for custom onboarding and settings screens.
 - Floating helper panel that follows the System Settings window.
 - App bundle drag item that becomes mouse-transparent while dragging so System Settings receives the drop.
@@ -44,7 +43,7 @@ still approve permissions through Apple's System Settings UI.
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/flewgg/FloatingPermissions.git", from: "0.2.0")
+    .package(url: "https://github.com/flewgg/FloatingPermissions.git", from: "0.2.1")
 ]
 ```
 
@@ -71,19 +70,36 @@ more panes later without changing the guide lifecycle.
 
 ## Quick Start
 
-Use `FloatingPermissionsButton` when you want a ready-made SwiftUI control:
+Create a controller and call `authorize` from your own onboarding or settings UI:
 
 ```swift
 import FloatingPermissions
 import SwiftUI
 
-struct PermissionsView: View {
-    var body: some View {
-        FloatingPermissionsButton(
-            title: "Open Accessibility",
-            pane: .accessibility,
-            suggestedAppURLs: [Bundle.main.bundleURL]
+@MainActor
+final class PermissionModel: ObservableObject {
+    private let controller = FloatingPermissions.makeController(
+        configuration: FloatingPermissionsConfiguration(
+            requiredAppURLs: [Bundle.main.bundleURL]
         )
+    )
+
+    func openAccessibility() {
+        controller.authorize(pane: .accessibility)
+    }
+
+    func openInputMonitoring() {
+        controller.authorize(pane: .inputMonitoring)
+    }
+}
+
+struct PermissionsView: View {
+    @StateObject private var model = PermissionModel()
+
+    var body: some View {
+        Button("Open Accessibility") {
+            model.openAccessibility()
+        }
     }
 }
 ```
@@ -91,11 +107,7 @@ struct PermissionsView: View {
 For Input Monitoring:
 
 ```swift
-FloatingPermissionsButton(
-    title: "Open Input Monitoring",
-    pane: .inputMonitoring,
-    suggestedAppURLs: [Bundle.main.bundleURL]
-)
+model.openInputMonitoring()
 ```
 
 ## Status Checks
@@ -127,8 +139,8 @@ The built-in providers use:
 
 ## Custom UI
 
-Use `FloatingPermissionsController` directly when your app has its own button,
-row, onboarding step, or settings screen.
+`FloatingPermissionsController` is the main entry point for apps that have their
+own buttons, rows, onboarding steps, or settings screens.
 
 ```swift
 import FloatingPermissions
@@ -213,7 +225,7 @@ PermissionStatusRegistry.register(
 
 ## Example App
 
-The `Example` folder contains a small macOS app with buttons for the supported
+The `Example` folder contains a small macOS app with custom buttons for the supported
 permission panes.
 
 Open `Example/Example.xcodeproj` in Xcode and run the `Example` scheme.

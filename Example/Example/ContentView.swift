@@ -1,3 +1,4 @@
+import AppKit
 import FloatingPermissions
 import SwiftUI
 
@@ -30,6 +31,9 @@ private struct PermissionPaneCard: View {
     let pane: FloatingPermissionPane
     let suggestedAppURL: URL
 
+    @StateObject private var controller = FloatingPermissions.makeController()
+    @State private var sourceFrameInScreen = CGRect.zero
+
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 10) {
@@ -46,13 +50,18 @@ private struct PermissionPaneCard: View {
 
             Spacer(minLength: 0)
 
-            FloatingPermissionsButton(
-                title: "Open",
-                pane: pane,
-                suggestedAppURLs: [suggestedAppURL]
-            )
+            Button {
+                controller.authorize(
+                    pane: pane,
+                    suggestedAppURLs: [suggestedAppURL],
+                    sourceFrameInScreen: sourceFrameInScreen
+                )
+            } label: {
+                Label("Open", systemImage: "arrow.up.right.circle.fill")
+            }
             .buttonStyle(.borderedProminent)
             .controlSize(.small)
+            .background(ScreenFrameReader(frameInScreen: $sourceFrameInScreen))
         }
         .padding(14)
         .frame(maxWidth: .infinity, minHeight: 112, alignment: .topLeading)
@@ -61,6 +70,56 @@ private struct PermissionPaneCard: View {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .stroke(.primary.opacity(0.1), lineWidth: 1)
         )
+    }
+}
+
+private struct ScreenFrameReader: NSViewRepresentable {
+    @Binding var frameInScreen: CGRect
+
+    func makeNSView(context: Context) -> ScreenFrameTrackingView {
+        let view = ScreenFrameTrackingView()
+        view.onFrameChange = { frame in
+            if frameInScreen != frame {
+                frameInScreen = frame
+            }
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: ScreenFrameTrackingView, context: Context) {
+        nsView.onFrameChange = { frame in
+            if frameInScreen != frame {
+                frameInScreen = frame
+            }
+        }
+        nsView.reportFrame()
+    }
+}
+
+private final class ScreenFrameTrackingView: NSView {
+    var onFrameChange: ((CGRect) -> Void)?
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        reportFrame()
+    }
+
+    override func layout() {
+        super.layout()
+        reportFrame()
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        reportFrame()
+    }
+
+    func reportFrame() {
+        guard let window else { return }
+        let frame = window.convertToScreen(convert(bounds, to: nil))
+        DispatchQueue.main.async { [onFrameChange] in
+            onFrameChange?(frame)
+        }
     }
 }
 

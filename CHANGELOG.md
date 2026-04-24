@@ -2,6 +2,11 @@
 
 All notable changes to FloatingPermissions will be documented in this file.
 
+## 0.2.1 - 2026-04-24
+
+- Removed `FloatingPermissionsButton` from the library API.
+- Updated documentation and the example app to use app-owned SwiftUI buttons with `FloatingPermissionsController`.
+
 ## 0.2.0 - 2026-04-24
 
 - Added compact floating guide panel.
