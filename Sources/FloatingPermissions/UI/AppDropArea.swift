@@ -3,7 +3,7 @@ import SwiftUI
 
 struct AppDragItemView: NSViewRepresentable {
     let url: URL
-    let onDragStateChange: (Bool) -> Void
+    let onDragStateChange: (Bool, NSDragOperation?) -> Void
 
     func makeNSView(context: Context) -> AppDragSourceView {
         let view = AppDragSourceView(url: url)
@@ -24,7 +24,7 @@ final class AppDragSourceView: NSView, NSDraggingSource {
     private var hasBegunDragging = false
 
     /// Tells the panel when it should temporarily become mouse-transparent.
-    var onDragStateChange: ((Bool) -> Void)?
+    var onDragStateChange: ((Bool, NSDragOperation?) -> Void)?
 
     init(url: URL) {
         self.url = url
@@ -92,11 +92,11 @@ final class AppDragSourceView: NSView, NSDraggingSource {
     }
 
     func draggingSession(_ session: NSDraggingSession, willBeginAt screenPoint: NSPoint) {
-        onDragStateChange?(true)
+        onDragStateChange?(true, nil)
     }
 
     func draggingSession(_ session: NSDraggingSession, endedAt screenPoint: NSPoint, operation: NSDragOperation) {
-        onDragStateChange?(false)
+        onDragStateChange?(false, operation)
         mouseDownPoint = nil
         hasBegunDragging = false
     }

@@ -7,8 +7,8 @@ struct FloatingPermissionPanelView: View {
         VStack(alignment: .leading, spacing: 6) {
             header
             if let primaryApp = controller.preferredAppURL {
-                AppDragItemView(url: primaryApp) { isDragging in
-                    controller.setPanelDragging(isDragging)
+                AppDragItemView(url: primaryApp) { isDragging, completedOperation in
+                    controller.setPanelDragging(isDragging, completedOperation: completedOperation)
                 }
                 .frame(maxWidth: .infinity)
             }
@@ -93,34 +93,20 @@ struct FloatingPermissionPanelView: View {
 private struct HeaderDirectionIcon: View {
     let isDragging: Bool
 
-    @State private var wigglePhase = false
-    @State private var scalePhase = false
-
     var body: some View {
         Image(systemName: "arrowshape.up.fill")
             .font(.system(size: 14, weight: .bold))
             .symbolRenderingMode(.hierarchical)
             .foregroundStyle(.tint)
-            .rotationEffect(.degrees(isDragging ? 0 : (wigglePhase ? 12 : -12)))
-            .offset(y: isDragging ? 0 : (wigglePhase ? -2 : 1))
-            .scaleEffect(isDragging ? (scalePhase ? 1.18 : 0.88) : 1)
-            .animation(
+            .phaseAnimator([0.0, 1.0, 0.0]) { content, phase in
+                content
+                    .rotationEffect(.degrees(isDragging ? 0 : -7 + (14 * phase)))
+                    .offset(y: isDragging ? -1.5 * phase : 1 - (3 * phase))
+                    .scaleEffect(isDragging ? 0.96 + (0.16 * phase) : 1)
+            } animation: { _ in
                 isDragging
-                    ? .easeInOut(duration: 0.68).repeatForever(autoreverses: true)
-                    : .easeInOut(duration: 0.22).repeatForever(autoreverses: true),
-                value: isDragging ? scalePhase : wigglePhase
-            )
-            .onAppear {
-                wigglePhase = true
-            }
-            .onChange(of: isDragging) { _, dragging in
-                if dragging {
-                    scalePhase = true
-                    wigglePhase = false
-                } else {
-                    scalePhase = false
-                    wigglePhase = true
-                }
+                    ? .smooth(duration: 0.58)
+                    : .easeInOut(duration: 0.82)
             }
     }
 }

@@ -134,9 +134,16 @@ public final class FloatingPermissionsController: ObservableObject {
 
     /// The panel becomes mouse-transparent while dragging so System Settings
     /// underneath can receive the drop.
-    func setPanelDragging(_ isDragging: Bool) {
+    func setPanelDragging(
+        _ isDragging: Bool,
+        completedOperation: NSDragOperation? = nil
+    ) {
         isDraggingApp = isDragging
         panel?.setDraggingPassthrough(isDragging)
+
+        if isDragging == false, let completedOperation, completedOperation.isEmpty == false {
+            closePanel()
+        }
     }
 
     /// Keeps System Settings visually present whenever the floating panel is
