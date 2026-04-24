@@ -1,27 +1,18 @@
 import AppKit
 import QuartzCore
-import SwiftUI
 
 @MainActor
 final class FloatingDropPanel: NSPanel {
     private weak var panelController: FloatingPermissionsController?
-    private let hostingView: NSHostingView<AnyView>
-    private let sizingView: NSHostingView<AnyView>
-    private let initialPanelWidth: CGFloat = 420
+    private let panelSize = NSSize(width: 530, height: 109)
 
-    /// System Settings has a leading sidebar. Matching the trailing content
-    /// area width keeps the floating panel visually aligned with the pane that
-    /// the user is actively interacting with.
-    private let sidebarWidth: CGFloat = 230
-    private let screenInset: CGFloat = 12
-    private let minimumPanelHeight: CGFloat = 96
-    private let sizingHeightLimit: CGFloat = 4096
-
-    /// Launch animation constants tuned to feel responsive without making the
-    /// panel overshoot or jitter while the target window is still settling.
-    private let animationDuration: TimeInterval = 0.72
-    private let animationResponse: Double = 0.72
+    private let sidebarWidth: CGFloat = 170
+    private let settingsInset: CGFloat = 14
+    private let screenInset: CGFloat = 8
+    private let animationDuration: TimeInterval = 0.52
+    private let animationResponse: Double = 0.62
     private let initialAlpha: CGFloat = 0.9
+
     private var launchTimer: Timer?
     private var launchStartTime: CFTimeInterval = 0
     private var launchFromFrame = NSRect.zero
@@ -30,18 +21,15 @@ final class FloatingDropPanel: NSPanel {
 
     init(controller: FloatingPermissionsController) {
         panelController = controller
-        let panelView = Self.makePanelView(controller: controller)
-        hostingView = NSHostingView(rootView: panelView)
-        sizingView = NSHostingView(rootView: panelView)
-        hostingView.sizingOptions = []
+
         super.init(
-            contentRect: CGRect(origin: .zero, size: CGSize(width: initialPanelWidth, height: minimumPanelHeight)),
+            contentRect: NSRect(origin: .zero, size: panelSize),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
         )
 
-        level = .floating
+        level = .statusBar
         isReleasedWhenClosed = false
         isOpaque = false
         backgroundColor = .clear
@@ -49,35 +37,34 @@ final class FloatingDropPanel: NSPanel {
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         isMovableByWindowBackground = false
         hidesOnDeactivate = false
-        animationBehavior = .utilityWindow
+        animationBehavior = .none
 
-        hostingView.translatesAutoresizingMaskIntoConstraints = false
-        contentView = hostingView
-        setContentSize(CGSize(width: initialPanelWidth, height: measuredPanelHeight(for: initialPanelWidth)))
+        contentView = FloatingDropPanelContentView(
+            controller: controller,
+            frame: NSRect(origin: .zero, size: panelSize)
+        )
+        setContentSize(panelSize)
     }
 
-    /// The panel intentionally stays non-activating so System Settings remains
-    /// the visible focus owner underneath it.
     override var canBecomeKey: Bool { false }
 
     override var canBecomeMain: Bool { false }
 
-    /// If the system temporarily tries to key this panel, immediately ask the
-    /// controller to keep System Settings visually frontmost underneath it.
+    override func close() {
+        stopLaunchAnimation()
+        super.close()
+    }
+
     override func becomeKey() {
         super.becomeKey()
         panelController?.keepSettingsVisible()
     }
 
-    /// Mirrors becomeKey() for main-window promotion attempts so the helper
-    /// remains non-disruptive to the actual System Settings interaction.
     override func becomeMain() {
         super.becomeMain()
         panelController?.keepSettingsVisible()
     }
 
-    /// Keeps System Settings visually present when the panel receives a mouse
-    /// down event, while still forwarding the event through normal handling.
     override func sendEvent(_ event: NSEvent) {
         if event.type == .leftMouseDown || event.type == .rightMouseDown {
             panelController?.keepSettingsVisible()
@@ -85,24 +72,19 @@ final class FloatingDropPanel: NSPanel {
         super.sendEvent(event)
     }
 
-    /// Shows the panel at its current frame without any positioning changes.
     func show() {
+        alphaValue = 1
         orderFrontRegardless()
     }
 
-    /// Displays the panel at the source frame used to start the launch motion.
-    /// This is used before the target System Settings frame is known.
     func show(at sourceFrameInScreen: CGRect) {
         stopLaunchAnimation()
         isAnimatingLaunch = false
         alphaValue = 1
-        let size = CGSize(width: frame.width, height: measuredPanelHeight(for: frame.width))
-        setFrame(launchSourceFrame(for: sourceFrameInScreen, size: size), display: false)
+        setFrame(launchSourceFrame(for: sourceFrameInScreen), display: false)
         orderFrontRegardless()
     }
 
-    /// Animates the panel from the triggering UI element toward the current
-    /// System Settings window frame once the destination becomes available.
     func present(from sourceFrameInScreen: CGRect, to settingsFrame: CGRect) {
         stopLaunchAnimation()
         let targetFrame = targetFrame(for: settingsFrame)
@@ -116,7 +98,7 @@ final class FloatingDropPanel: NSPanel {
         }
 
         isAnimatingLaunch = true
-        launchFromFrame = launchSourceFrame(for: sourceFrameInScreen, size: targetFrame.size)
+        launchFromFrame = launchSourceFrame(for: sourceFrameInScreen)
         launchToFrame = targetFrame
         launchStartTime = CACurrentMediaTime()
         alphaValue = initialAlpha
@@ -133,8 +115,6 @@ final class FloatingDropPanel: NSPanel {
         launchTimer = timer
     }
 
-    /// Switches the panel into a drag-friendly mode where mouse events pass
-    /// through so System Settings can receive the drop destination interaction.
     func setDraggingPassthrough(_ isDragging: Bool) {
         ignoresMouseEvents = isDragging
         alphaValue = isDragging ? 0.72 : 1.0
@@ -145,91 +125,48 @@ final class FloatingDropPanel: NSPanel {
         }
     }
 
-    /// Repositions the panel under the latest tracked System Settings frame.
-    /// While the launch animation is still running, only the destination is
-    /// updated so the motion stays continuous.
+    func hideForPermissionResolution() {
+        orderOut(nil)
+    }
+
     func snap(to settingsFrame: CGRect) {
         let target = targetFrame(for: settingsFrame)
         if isAnimatingLaunch {
-            // Tracking updates can arrive during the launch. Updating the final
-            // destination preserves the motion without resizing mid-flight.
-            launchToFrame = CGRect(origin: target.origin, size: launchFromFrame.size)
+            launchToFrame = target
             return
         }
 
         stopLaunchAnimation()
+        alphaValue = 1
         setFrame(target, display: false)
         orderFrontRegardless()
     }
 
-    /// Calculates the final panel frame relative to the System Settings window.
-    /// The panel aligns to the trailing content area, stays underneath the
-    /// window, and is clamped to the visible frame of the matching screen.
     private func targetFrame(for settingsFrame: CGRect) -> CGRect {
         let screenFrame = NSScreen.screens
             .first(where: { $0.frame.intersects(settingsFrame) })?
             .visibleFrame ?? settingsFrame
 
-        // The helper panel is anchored to the trailing content area of System
-        // Settings rather than the full window width because the leading
-        // sidebar is not the user's active target.
         let contentMinX = settingsFrame.minX + sidebarWidth
-        let availableContentWidth = max(240, settingsFrame.width - sidebarWidth)
-        let width = min(availableContentWidth, screenFrame.width - (screenInset * 2))
-        let height = measuredPanelHeight(for: width)
+        let contentWidth = max(settingsFrame.width - sidebarWidth, panelSize.width)
+        let preferredX = contentMinX + ((contentWidth - panelSize.width) / 2) - 8
+        let preferredY = settingsFrame.minY + settingsInset
 
-        // This is the place to tune visual attachment if the panel feels too
-        // far from the bottom edge of System Settings.
-        //
-        // Current behavior:
-        //   y = settingsFrame.minY - height
-        // means "place the panel immediately below the tracked window frame".
-        //
-        // If the tracked frame still includes some visual framing/shadow, the
-        // panel will look separated by that amount. A manual tweak such as:
-        //
-        //   y = settingsFrame.minY - height + 28
-        //
-        // is effectively saying "treat the bottom 28pt as non-visual spacing
-        // and pull the panel upward".
-        //
-        // This is usually a better place for that adjustment than
-        // SettingsWindowTracker.appKitScreenFrame(...), because the intent here
-        // is clearly visual alignment of the floating panel, not coordinate
-        // conversion of the tracked window.
-        var origin = CGPoint(
-            x: contentMinX,
-            y: settingsFrame.minY - height
-        )
+        let x = min(max(preferredX, screenFrame.minX + screenInset), screenFrame.maxX - panelSize.width - screenInset)
+        let y = min(max(preferredY, screenFrame.minY + screenInset), screenFrame.maxY - panelSize.height - screenInset)
 
-        origin.x = max(screenFrame.minX + screenInset, min(origin.x, screenFrame.maxX - width - screenInset))
-        origin.y = max(screenFrame.minY + screenInset, min(origin.y, screenFrame.maxY - height - screenInset))
-
-        return CGRect(origin: origin, size: CGSize(width: width, height: height))
+        return NSRect(x: x, y: y, width: panelSize.width, height: panelSize.height)
     }
 
-    /// Builds the starting frame for the launch animation around the source UI
-    /// element while keeping the final panel size from the first visible frame.
-    private func launchSourceFrame(for sourceFrameInScreen: CGRect, size: CGSize) -> CGRect {
-        let center = CGPoint(x: sourceFrameInScreen.midX, y: sourceFrameInScreen.midY)
-        return CGRect(
-            x: center.x - (size.width * 0.5),
-            y: center.y - (size.height * 0.5),
-            width: size.width,
-            height: size.height
+    private func launchSourceFrame(for sourceFrameInScreen: CGRect) -> CGRect {
+        NSRect(
+            x: sourceFrameInScreen.midX - panelSize.width / 2,
+            y: sourceFrameInScreen.midY - panelSize.height / 2,
+            width: panelSize.width,
+            height: panelSize.height
         )
     }
 
-    /// Measures the SwiftUI content at a specific width so the panel height can
-    /// fit its dynamic contents before being positioned or animated.
-    private func measuredPanelHeight(for width: CGFloat) -> CGFloat {
-        sizingView.setFrameSize(NSSize(width: width, height: sizingHeightLimit))
-        sizingView.layoutSubtreeIfNeeded()
-        return max(minimumPanelHeight, sizingView.fittingSize.height)
-    }
-
-    /// Advances the current launch animation frame-by-frame until the panel
-    /// reaches its destination under the System Settings window.
     private func stepLaunchAnimation() {
         let elapsed = max(0, CACurrentMediaTime() - launchStartTime)
         if elapsed >= animationDuration {
@@ -245,25 +182,18 @@ final class FloatingDropPanel: NSPanel {
         setFrame(curvedFrame(from: launchFromFrame, to: launchToFrame, progress: progress), display: true)
     }
 
-    /// Stops and clears the timer that drives the launch animation.
     private func stopLaunchAnimation() {
         launchTimer?.invalidate()
         launchTimer = nil
     }
 
-    /// Produces a smooth eased progress value for the launch motion so the
-    /// panel accelerates and settles without a harsh linear stop.
     private func springProgress(at elapsed: TimeInterval) -> CGFloat {
         let omega = (2 * Double.pi) / animationResponse
         let progress = 1 - exp(-omega * elapsed) * (1 + (omega * elapsed))
         return min(max(progress, 0), 1)
     }
 
-    /// Moves the animated frame along a quadratic Bezier path without resizing
-    /// the window, which keeps the material and SwiftUI content stable.
     private func curvedFrame(from: CGRect, to: CGRect, progress: CGFloat) -> CGRect {
-        // A quadratic Bezier curve gives the panel a softer "fly to target"
-        // motion than a straight linear interpolation.
         let startCenter = CGPoint(x: from.midX, y: from.midY)
         let endCenter = CGPoint(x: to.midX, y: to.midY)
         let midpoint = CGPoint(
@@ -286,9 +216,147 @@ final class FloatingDropPanel: NSPanel {
             height: from.height
         )
     }
+}
 
-    private static func makePanelView(controller: FloatingPermissionsController) -> AnyView {
-        let view = FloatingPermissionPanelView(controller: controller)
-        return AnyView(view)
+private final class FloatingDropPanelContentView: NSView {
+    private weak var controller: FloatingPermissionsController?
+    private let materialView = NSVisualEffectView()
+    private let titleLabel = NSTextField(labelWithString: "")
+    private let arrowView = NSImageView()
+    private var dragSource: AppDragSourceView?
+
+    init(controller: FloatingPermissionsController, frame: NSRect) {
+        self.controller = controller
+        super.init(frame: frame)
+        translatesAutoresizingMaskIntoConstraints = false
+        setup()
+        configure(controller: controller)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    private func setup() {
+        materialView.translatesAutoresizingMaskIntoConstraints = false
+        materialView.material = .popover
+        materialView.blendingMode = .behindWindow
+        materialView.state = .active
+        materialView.wantsLayer = true
+        materialView.layer?.cornerRadius = 18
+        materialView.layer?.masksToBounds = true
+        materialView.layer?.borderWidth = 0.5
+        materialView.layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.18).cgColor
+        addSubview(materialView)
+
+        let tintView = NSView()
+        tintView.translatesAutoresizingMaskIntoConstraints = false
+        tintView.wantsLayer = true
+        tintView.layer?.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.78).cgColor
+        materialView.addSubview(tintView)
+
+        let backChrome = NSView()
+        backChrome.translatesAutoresizingMaskIntoConstraints = false
+        backChrome.wantsLayer = true
+        backChrome.layer?.backgroundColor = NSColor.controlBackgroundColor.withAlphaComponent(0.95).cgColor
+        backChrome.layer?.cornerRadius = 16
+        materialView.addSubview(backChrome)
+
+        let backButton = NSButton()
+        backButton.translatesAutoresizingMaskIntoConstraints = false
+        backButton.isBordered = false
+        backButton.image = NSImage(systemSymbolName: "chevron.left", accessibilityDescription: "Back")
+        backButton.contentTintColor = NSColor.labelColor.withAlphaComponent(0.72)
+        backButton.target = self
+        backButton.action = #selector(backPressed)
+        if let cell = backButton.cell as? NSButtonCell {
+            cell.imagePosition = .imageOnly
+        }
+        backChrome.addSubview(backButton)
+
+        arrowView.translatesAutoresizingMaskIntoConstraints = false
+        arrowView.image = NSImage(systemSymbolName: "arrow.up", accessibilityDescription: nil)
+        arrowView.symbolConfiguration = .init(pointSize: 28, weight: .bold)
+        arrowView.contentTintColor = NSColor(calibratedRed: 0.15, green: 0.54, blue: 0.98, alpha: 1)
+        materialView.addSubview(arrowView)
+
+        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+        titleLabel.maximumNumberOfLines = 1
+        titleLabel.lineBreakMode = .byTruncatingTail
+        materialView.addSubview(titleLabel)
+
+        NSLayoutConstraint.activate([
+            widthAnchor.constraint(equalToConstant: 530),
+            heightAnchor.constraint(equalToConstant: 109),
+
+            materialView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            materialView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            materialView.topAnchor.constraint(equalTo: topAnchor),
+            materialView.bottomAnchor.constraint(equalTo: bottomAnchor),
+
+            tintView.leadingAnchor.constraint(equalTo: materialView.leadingAnchor),
+            tintView.trailingAnchor.constraint(equalTo: materialView.trailingAnchor),
+            tintView.topAnchor.constraint(equalTo: materialView.topAnchor),
+            tintView.bottomAnchor.constraint(equalTo: materialView.bottomAnchor),
+
+            backChrome.leadingAnchor.constraint(equalTo: materialView.leadingAnchor, constant: 18),
+            backChrome.topAnchor.constraint(equalTo: materialView.topAnchor, constant: 52),
+            backChrome.widthAnchor.constraint(equalToConstant: 32),
+            backChrome.heightAnchor.constraint(equalToConstant: 32),
+
+            backButton.centerXAnchor.constraint(equalTo: backChrome.centerXAnchor),
+            backButton.centerYAnchor.constraint(equalTo: backChrome.centerYAnchor),
+            backButton.widthAnchor.constraint(equalToConstant: 14),
+            backButton.heightAnchor.constraint(equalToConstant: 14),
+
+            arrowView.leadingAnchor.constraint(equalTo: materialView.leadingAnchor, constant: 35),
+            arrowView.topAnchor.constraint(equalTo: materialView.topAnchor, constant: 10),
+            arrowView.widthAnchor.constraint(equalToConstant: 28),
+            arrowView.heightAnchor.constraint(equalToConstant: 28),
+
+            titleLabel.leadingAnchor.constraint(equalTo: arrowView.trailingAnchor, constant: 10),
+            titleLabel.centerYAnchor.constraint(equalTo: arrowView.centerYAnchor),
+            titleLabel.trailingAnchor.constraint(equalTo: materialView.trailingAnchor, constant: -22)
+        ])
+    }
+
+    private func configure(controller: FloatingPermissionsController) {
+        titleLabel.attributedStringValue = title(controller: controller)
+
+        guard let appURL = controller.preferredAppURL else { return }
+        let dragSource = AppDragSourceView(url: appURL)
+        dragSource.translatesAutoresizingMaskIntoConstraints = false
+        dragSource.onDragStateChange = { [weak controller] isDragging, operation in
+            Task { @MainActor in
+                controller?.setPanelDragging(isDragging, completedOperation: operation)
+            }
+        }
+        materialView.addSubview(dragSource)
+        self.dragSource = dragSource
+
+        NSLayoutConstraint.activate([
+            dragSource.leadingAnchor.constraint(equalTo: materialView.leadingAnchor, constant: 64),
+            dragSource.trailingAnchor.constraint(equalTo: materialView.trailingAnchor, constant: -21),
+            dragSource.topAnchor.constraint(equalTo: materialView.topAnchor, constant: 47),
+            dragSource.heightAnchor.constraint(equalToConstant: 43)
+        ])
+    }
+
+    private func title(controller: FloatingPermissionsController) -> NSAttributedString {
+        let appName = controller.preferredAppURL.map { FileManager.default.displayName(atPath: $0.path) } ?? "this app"
+        let paneTitle = controller.currentPane?.displayTitle ?? "Permission"
+        return NSAttributedString(
+            string: "Drag \(appName) to the list above to allow \(paneTitle)",
+            attributes: [
+                .font: NSFont.systemFont(ofSize: 14, weight: .medium),
+                .foregroundColor: NSColor.labelColor.withAlphaComponent(0.82)
+            ]
+        )
+    }
+
+    @objc
+    private func backPressed() {
+        controller?.closePanel()
     }
 }

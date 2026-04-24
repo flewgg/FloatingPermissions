@@ -142,18 +142,20 @@ Use the authorization state when you need more than a boolean:
 let accessibilityState = FloatingPermissionPane.accessibility.authorizationState
 ```
 
-These checks mirror our app usage: Accessibility uses `AXIsProcessTrusted()` and Input Monitoring uses `CGPreflightListenEventAccess()`.
+These checks mirror the guided flow: Accessibility uses `AXIsProcessTrusted()` and Input Monitoring uses `IOHIDCheckAccess(kIOHIDRequestTypeListenEvent)`.
 
 ## Behavior
 
 - Opens System Settings with the correct privacy deeplink.
-- Shows the floating helper only after the System Settings window appears.
+- Shows the floating helper only after the System Settings window appears and its frame stabilizes.
 - Keeps one active floating helper at a time.
+- Docks a compact material helper inside the System Settings window.
+- Animates the helper from the triggering control toward the Settings window.
 - Tracks the System Settings window and keeps the helper visually attached to it.
 - Makes the helper mouse-transparent while dragging so System Settings can receive the drop.
-- Closes the helper after a successful drop.
+- Hides the helper while the TCC prompt resolves, then closes it when permission is granted.
 - Does not force focus back to the app after the helper closes.
-- Uses the app icon as the drag preview.
+- Uses the compact app row as the drag preview.
 
 ## Example App
 

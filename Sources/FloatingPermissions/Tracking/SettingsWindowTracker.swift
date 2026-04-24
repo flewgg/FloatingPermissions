@@ -12,6 +12,7 @@ final class SettingsWindowTracker {
     /// privacy panes. Requiring several misses avoids false "window closed"
     /// detection and keeps the floating panel stable.
     private let missingAppThreshold = 12
+    private let initialStabilizationBudget: TimeInterval = 1.2
 
     var onFrameChange: ((CGRect) -> Void)?
     var onTrackingEnded: (() -> Void)?
@@ -23,6 +24,9 @@ final class SettingsWindowTracker {
     private var observedWindow: AXUIElement?
     private var pollTimer: Timer?
     private var hasActiveTrackingTarget = false
+    private var hasPublishedInitialFrame = false
+    private var firstSeenAt: CFTimeInterval?
+    private var lastCandidateFrame: CGRect?
     private var missingAppPollCount = 0
 
     /// Starts locating the System Settings window and emitting frame updates.
@@ -70,6 +74,9 @@ final class SettingsWindowTracker {
         observedWindow = nil
         currentFrame = nil
         hasActiveTrackingTarget = false
+        hasPublishedInitialFrame = false
+        firstSeenAt = nil
+        lastCandidateFrame = nil
         missingAppPollCount = 0
     }
 
@@ -128,9 +135,7 @@ final class SettingsWindowTracker {
     /// fallback geometry source while System Settings is opening.
     private func updateFrameFromWindowServer(for pid: pid_t) {
         guard let frame = windowServerFrame(for: pid) else { return }
-        guard currentFrame != frame else { return }
-        currentFrame = frame
-        onFrameChange?(frame)
+        publishFrame(frame)
     }
 
     /// Rebinds the AX observer to the currently tracked System Settings
@@ -166,6 +171,29 @@ final class SettingsWindowTracker {
         else { return }
 
         let frame = appKitFrame(fromGlobalTopLeftFrame: CGRect(origin: position, size: size))
+        publishFrame(frame)
+    }
+
+    /// Waits for the first Settings frame to settle before the helper flies in.
+    /// Cold launch and Dock restore animations can otherwise produce a target
+    /// that moves under the panel mid-flight.
+    private func publishFrame(_ frame: CGRect) {
+        if hasPublishedInitialFrame == false {
+            let now = CACurrentMediaTime()
+
+            if let lastCandidateFrame, lastCandidateFrame.integral == frame.integral {
+                hasPublishedInitialFrame = true
+            } else if let firstSeenAt, now - firstSeenAt >= initialStabilizationBudget {
+                hasPublishedInitialFrame = true
+            } else {
+                if firstSeenAt == nil {
+                    firstSeenAt = now
+                }
+                lastCandidateFrame = frame
+                return
+            }
+        }
+
         guard currentFrame != frame else { return }
         currentFrame = frame
         onFrameChange?(frame)

@@ -25,6 +25,8 @@ public final class FloatingPermissionsController: ObservableObject {
 
     private var panel: FloatingDropPanel?
     private var pendingLaunchSourceFrame: CGRect?
+    private var permissionPollTimer: Timer?
+    private var permissionResolutionTask: Task<Void, Never>?
     private var cancellables = Set<AnyCancellable>()
 
     public init(configuration: FloatingPermissionsConfiguration = .init()) {
@@ -62,6 +64,7 @@ public final class FloatingPermissionsController: ObservableObject {
         SystemSettings.open(url: pane.settingsURL)
 
         Self.activeController = self
+        startPermissionPolling()
         tracker.startTracking(promptIfNeeded: configuration.promptForAccessibilityTrust)
     }
 
@@ -88,6 +91,9 @@ public final class FloatingPermissionsController: ObservableObject {
     }
 
     public func closePanel() {
+        permissionResolutionTask?.cancel()
+        permissionResolutionTask = nil
+        stopPermissionPolling()
         tracker.stopTracking()
         panel?.close()
         panel = nil
@@ -130,7 +136,7 @@ public final class FloatingPermissionsController: ObservableObject {
         panel?.setDraggingPassthrough(isDragging)
 
         if isDragging == false, let completedOperation, completedOperation.isEmpty == false {
-            closePanel()
+            waitForPermissionResolutionAfterDrop()
         }
     }
 
@@ -174,6 +180,7 @@ public final class FloatingPermissionsController: ObservableObject {
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
                 self?.updateFrontmostAppState()
+                self?.closePanelIfPermissionGranted()
             }
             .store(in: &cancellables)
     }
@@ -186,6 +193,7 @@ public final class FloatingPermissionsController: ObservableObject {
 
     private func presentPanel(_ panel: FloatingDropPanel?, for settingsFrame: CGRect) {
         guard let panel else { return }
+        guard closePanelIfPermissionGranted() == false else { return }
 
         if let sourceFrame = pendingLaunchSourceFrame {
             panel.present(from: sourceFrame, to: settingsFrame)
@@ -206,6 +214,54 @@ public final class FloatingPermissionsController: ObservableObject {
     private func updateFrontmostAppState() {
         isSettingsFrontmost =
             NSWorkspace.shared.frontmostApplication?.bundleIdentifier == systemSettingsBundleIdentifier
+    }
+
+    private func startPermissionPolling() {
+        stopPermissionPolling()
+        permissionPollTimer = Timer.scheduledTimer(withTimeInterval: 0.75, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.closePanelIfPermissionGranted()
+            }
+        }
+        permissionPollTimer?.tolerance = 0.2
+    }
+
+    private func stopPermissionPolling() {
+        permissionPollTimer?.invalidate()
+        permissionPollTimer = nil
+    }
+
+    @discardableResult
+    private func closePanelIfPermissionGranted() -> Bool {
+        guard let currentPane, currentPane.isGranted else { return false }
+        closePanel()
+        return true
+    }
+
+    private func waitForPermissionResolutionAfterDrop() {
+        guard let currentPane else { return }
+        permissionResolutionTask?.cancel()
+        panel?.hideForPermissionResolution()
+
+        permissionResolutionTask = Task { @MainActor [weak self] in
+            let isGranted = await PermissionResolutionWatcher.waitForResolution(
+                pane: currentPane,
+                timeout: .seconds(10)
+            )
+            guard let self, Task.isCancelled == false else { return }
+            self.permissionResolutionTask = nil
+
+            if isGranted {
+                self.closePanel()
+                return
+            }
+
+            if let frame = self.tracker.currentFrame {
+                self.showPanel(for: frame)
+            } else {
+                self.showPanel()
+            }
+        }
     }
 }
 

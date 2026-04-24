@@ -1,4 +1,4 @@
-import Carbon
+import IOKit.hid
 
 public struct InputMonitoringPermissionStatusProvider: PermissionStatusProviding {
     public var capability: PermissionStatusCapability { .preflightSupported }
@@ -6,6 +6,6 @@ public struct InputMonitoringPermissionStatusProvider: PermissionStatusProviding
     public init() {}
 
     public func authorizationState() -> PermissionAuthorizationState {
-        CGPreflightListenEventAccess() ? .granted : .notGranted
+        IOHIDCheckAccess(kIOHIDRequestTypeListenEvent) == kIOHIDAccessTypeGranted ? .granted : .notGranted
     }
 }

@@ -1,89 +1,89 @@
 import AppKit
-import SwiftUI
-
-struct AppDragItemView: NSViewRepresentable {
-    let url: URL
-    let onDragStateChange: (Bool, NSDragOperation?) -> Void
-
-    func makeNSView(context: Context) -> AppDragSourceView {
-        let view = AppDragSourceView(url: url)
-        view.onDragStateChange = onDragStateChange
-        return view
-    }
-
-    func updateNSView(_ nsView: AppDragSourceView, context: Context) {
-        nsView.update(url: url)
-        nsView.onDragStateChange = onDragStateChange
-    }
-}
 
 final class AppDragSourceView: NSView, NSDraggingSource {
+    private let dragThreshold: CGFloat = 3
     private var url: URL
-    private let hostingView: NSHostingView<AnyView>
-    private var mouseDownPoint: NSPoint?
-    private var hasBegunDragging = false
+    private let rowView = NSView()
+    private let iconChrome = NSView()
+    private let label = NSTextField(labelWithString: "")
+    private var mouseDownEvent: NSEvent?
+    private var hasStartedDrag = false
 
-    /// Tells the panel when it should temporarily become mouse-transparent.
     var onDragStateChange: ((Bool, NSDragOperation?) -> Void)?
 
     init(url: URL) {
         self.url = url
-        self.hostingView = NSHostingView(rootView: AnyView(AppDragCardContent(url: url).allowsHitTesting(false)))
         super.init(frame: .zero)
-
-        hostingView.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(hostingView)
-
-        NSLayoutConstraint.activate([
-            hostingView.leadingAnchor.constraint(equalTo: leadingAnchor),
-            hostingView.trailingAnchor.constraint(equalTo: trailingAnchor),
-            hostingView.topAnchor.constraint(equalTo: topAnchor),
-            hostingView.bottomAnchor.constraint(equalTo: bottomAnchor)
-        ])
+        translatesAutoresizingMaskIntoConstraints = false
+        setup()
+        update(url: url)
+        updateAppearance()
     }
 
+    @available(*, unavailable)
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
 
+    override var intrinsicContentSize: NSSize {
+        NSSize(width: NSView.noIntrinsicMetric, height: 43)
+    }
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        true
+    }
+
+    override func resetCursorRects() {
+        addCursorRect(bounds, cursor: .openHand)
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        updateAppearance()
+    }
+
     func update(url: URL) {
         self.url = url
-        hostingView.rootView = AnyView(AppDragCardContent(url: url).allowsHitTesting(false))
-        invalidateIntrinsicContentSize()
-    }
+        label.stringValue = FileManager.default.displayName(atPath: url.path)
 
-    override func hitTest(_ point: NSPoint) -> NSView? {
-        guard bounds.contains(point) else { return nil }
-        return self
-    }
-
-    override var intrinsicContentSize: NSSize {
-        let fitting = hostingView.fittingSize
-        return NSSize(width: NSView.noIntrinsicMetric, height: max(88, fitting.height))
+        if let iconView = iconChrome.subviews.compactMap({ $0 as? NSImageView }).first {
+            let icon = NSWorkspace.shared.icon(forFile: url.path)
+            icon.size = NSSize(width: 22, height: 22)
+            iconView.image = icon
+        }
     }
 
     override func mouseDown(with event: NSEvent) {
-        mouseDownPoint = convert(event.locationInWindow, from: nil)
-        hasBegunDragging = false
+        mouseDownEvent = event
+        hasStartedDrag = false
     }
 
     override func mouseDragged(with event: NSEvent) {
-        guard hasBegunDragging == false, let mouseDownPoint else { return }
+        guard let mouseDownEvent, hasStartedDrag == false else {
+            super.mouseDragged(with: event)
+            return
+        }
 
-        let currentPoint = convert(event.locationInWindow, from: nil)
-        let distance = hypot(currentPoint.x - mouseDownPoint.x, currentPoint.y - mouseDownPoint.y)
-        guard distance > 4 else { return }
+        let distance = hypot(
+            event.locationInWindow.x - mouseDownEvent.locationInWindow.x,
+            event.locationInWindow.y - mouseDownEvent.locationInWindow.y
+        )
+        guard distance >= dragThreshold else { return }
 
-        hasBegunDragging = true
-        beginAppDrag(with: event)
+        hasStartedDrag = true
+        beginAppDrag(with: mouseDownEvent)
     }
 
     override func mouseUp(with event: NSEvent) {
-        mouseDownPoint = nil
-        hasBegunDragging = false
+        mouseDownEvent = nil
+        hasStartedDrag = false
+        super.mouseUp(with: event)
     }
 
-    func draggingSession(_ session: NSDraggingSession, sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation {
+    func draggingSession(
+        _ session: NSDraggingSession,
+        sourceOperationMaskFor context: NSDraggingContext
+    ) -> NSDragOperation {
         .copy
     }
 
@@ -92,34 +92,107 @@ final class AppDragSourceView: NSView, NSDraggingSource {
     }
 
     func draggingSession(_ session: NSDraggingSession, willBeginAt screenPoint: NSPoint) {
+        rowView.isHidden = true
         onDragStateChange?(true, nil)
     }
 
-    func draggingSession(_ session: NSDraggingSession, endedAt screenPoint: NSPoint, operation: NSDragOperation) {
+    func draggingSession(
+        _ session: NSDraggingSession,
+        endedAt screenPoint: NSPoint,
+        operation: NSDragOperation
+    ) {
+        rowView.isHidden = false
+        mouseDownEvent = nil
+        hasStartedDrag = false
         onDragStateChange?(false, operation)
-        mouseDownPoint = nil
-        hasBegunDragging = false
+    }
+
+    private func setup() {
+        wantsLayer = true
+
+        rowView.wantsLayer = true
+        rowView.layer?.cornerRadius = 7
+        rowView.layer?.borderWidth = 1
+        rowView.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(rowView)
+
+        iconChrome.wantsLayer = true
+        iconChrome.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.9).cgColor
+        iconChrome.layer?.cornerRadius = 6
+        iconChrome.translatesAutoresizingMaskIntoConstraints = false
+        rowView.addSubview(iconChrome)
+
+        let iconView = NSImageView(image: NSWorkspace.shared.icon(forFile: url.path))
+        iconView.translatesAutoresizingMaskIntoConstraints = false
+        iconView.imageScaling = .scaleProportionallyUpOrDown
+        iconChrome.addSubview(iconView)
+
+        label.font = .systemFont(ofSize: 15, weight: .semibold)
+        label.textColor = NSColor.labelColor.withAlphaComponent(0.82)
+        label.lineBreakMode = .byTruncatingTail
+        label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        label.translatesAutoresizingMaskIntoConstraints = false
+        rowView.addSubview(label)
+
+        NSLayoutConstraint.activate([
+            rowView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            rowView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            rowView.topAnchor.constraint(equalTo: topAnchor),
+            rowView.bottomAnchor.constraint(equalTo: bottomAnchor),
+            rowView.heightAnchor.constraint(equalToConstant: 43),
+
+            iconChrome.leadingAnchor.constraint(equalTo: rowView.leadingAnchor, constant: 10),
+            iconChrome.centerYAnchor.constraint(equalTo: rowView.centerYAnchor),
+            iconChrome.widthAnchor.constraint(equalToConstant: 26),
+            iconChrome.heightAnchor.constraint(equalToConstant: 26),
+
+            iconView.centerXAnchor.constraint(equalTo: iconChrome.centerXAnchor),
+            iconView.centerYAnchor.constraint(equalTo: iconChrome.centerYAnchor),
+            iconView.widthAnchor.constraint(equalToConstant: 22),
+            iconView.heightAnchor.constraint(equalToConstant: 22),
+
+            label.leadingAnchor.constraint(equalTo: iconChrome.trailingAnchor, constant: 11),
+            label.trailingAnchor.constraint(lessThanOrEqualTo: rowView.trailingAnchor, constant: -12),
+            label.centerYAnchor.constraint(equalTo: rowView.centerYAnchor)
+        ])
+    }
+
+    private func updateAppearance() {
+        let isDark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        if isDark {
+            rowView.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.06).cgColor
+            rowView.layer?.borderColor = NSColor.white.withAlphaComponent(0.08).cgColor
+        } else {
+            rowView.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.65).cgColor
+            rowView.layer?.borderColor = NSColor(
+                red: 0.87451,
+                green: 0.866667,
+                blue: 0.862745,
+                alpha: 1
+            ).cgColor
+        }
     }
 
     private func beginAppDrag(with event: NSEvent) {
-        // System Settings accepts drags more reliably when the payload looks
-        // close to a Finder-originated file drag.
         let writer = AppBundlePasteboardWriter(url: url)
         let draggingItem = NSDraggingItem(pasteboardWriter: writer)
-        let icon = NSWorkspace.shared.icon(forFile: url.path)
-        icon.size = NSSize(width: 56, height: 56)
-        let dragPoint = convert(event.locationInWindow, from: nil)
-        let dragFrame = NSRect(
-            x: dragPoint.x - 28,
-            y: dragPoint.y - 28,
-            width: 56,
-            height: 56
-        )
-        draggingItem.setDraggingFrame(dragFrame, contents: icon)
+        draggingItem.setDraggingFrame(draggingFrame(), contents: draggingImage())
 
         let session = beginDraggingSession(with: [draggingItem], event: event, source: self)
         session.animatesToStartingPositionsOnCancelOrFail = true
         session.draggingFormation = .none
+    }
+
+    private func draggingFrame() -> NSRect {
+        convert(rowView.bounds, from: rowView)
+    }
+
+    private func draggingImage() -> NSImage {
+        let image = NSImage(size: rowView.bounds.size)
+        image.lockFocus()
+        rowView.displayIgnoringOpacity(rowView.bounds, in: NSGraphicsContext.current!)
+        image.unlockFocus()
+        return image
     }
 }
 
@@ -151,39 +224,5 @@ private final class AppBundlePasteboardWriter: NSObject, NSPasteboardWriting {
         default:
             return nil
         }
-    }
-}
-
-private struct AppDragCardContent: View {
-    let url: URL
-
-    var body: some View {
-        HStack(spacing: 8) {
-            Image(nsImage: NSWorkspace.shared.icon(forFile: url.path))
-                .resizable()
-                .frame(width: 32, height: 32)
-                .cornerRadius(10)
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(url.deletingPathExtension().lastPathComponent)
-                    .font(.system(size: 16, weight: .regular))
-                    .foregroundStyle(.primary)
-            }
-            Spacer()
-            VStack(spacing: 0) {
-                Image(systemName: "hand.draw")
-                    .font(.system(size: 14, weight: .regular))
-                Text("Drag")
-                    .font(.system(size: 8, weight: .light))
-            }
-            .foregroundStyle(.secondary)
-            .padding(.trailing, 6)
-        }
-        .padding(6)
-        .background(.background.opacity(0.65), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(.primary.opacity(0.085), style: StrokeStyle(lineWidth: 1, dash: []))
-        )
     }
 }
