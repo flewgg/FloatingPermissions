@@ -7,19 +7,20 @@ import Testing
 }
 
 @Test
-func paneURLsUseSecuritySettingsDeepLink() {
+func paneURLsUseSecuritySettingsDeepLinks() {
     #expect(
-        FloatingPermissionPane.fullDiskAccess.settingsURL.absoluteString ==
-        "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_AllFiles"
+        FloatingPermissionPane.accessibility.settingsURL.absoluteString ==
+        "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_Accessibility"
+    )
+    #expect(
+        FloatingPermissionPane.inputMonitoring.settingsURL.absoluteString ==
+        "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_ListenEvent"
     )
 }
 
 @Test
-func typedDisplaysAnchorBuildsDeepLink() {
-    #expect(
-        SystemSettingsDestination.displays(anchor: .resolutionSection).url.absoluteString ==
-        "x-apple.systempreferences:com.apple.Displays-Settings.extension?resolutionSection"
-    )
+func supportedPanesStayFocused() {
+    #expect(FloatingPermissionPane.allCases == [.accessibility, .inputMonitoring])
 }
 
 @Test

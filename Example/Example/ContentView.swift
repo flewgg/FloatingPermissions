@@ -4,13 +4,7 @@ import SwiftUI
 struct ContentView: View {
     private let panes: [FloatingPermissionPane] = [
         .accessibility,
-        .appManagement,
-        .bluetooth,
-        .developerTools,
-        .fullDiskAccess,
-        .inputMonitoring,
-        .mediaAppleMusic,
-        .screenRecording
+        .inputMonitoring
     ]
 
     var body: some View {
@@ -74,26 +68,14 @@ private extension FloatingPermissionPane {
     var symbolName: String {
         switch self {
         case .accessibility: "figure.wave"
-        case .appManagement: "shippingbox"
-        case .bluetooth: "bolt.horizontal.circle"
-        case .developerTools: "hammer"
-        case .fullDiskAccess: "externaldrive"
         case .inputMonitoring: "keyboard"
-        case .mediaAppleMusic: "music.note.list"
-        case .screenRecording: "display"
         }
     }
 
     var tint: Color {
         switch self {
         case .accessibility: .blue
-        case .appManagement: .brown
-        case .bluetooth: .cyan
-        case .developerTools: .orange
-        case .fullDiskAccess: .indigo
         case .inputMonitoring: .mint
-        case .mediaAppleMusic: .red
-        case .screenRecording: .green
         }
     }
 }
