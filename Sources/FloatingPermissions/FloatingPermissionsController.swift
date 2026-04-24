@@ -28,7 +28,7 @@ public final class FloatingPermissionsController: ObservableObject {
 
     private var panel: FloatingDropPanel?
     private var pendingLaunchSourceFrame: CGRect?
-    private weak var triggerWindow: NSWindow?
+    private var triggerWindow: NSWindow?
     private var previousFrontmostApplicationPID: pid_t?
     private var previousFrontmostApplicationBundleIdentifier: String?
     private var cancellables = Set<AnyCancellable>()
@@ -213,28 +213,47 @@ public final class FloatingPermissionsController: ObservableObject {
     }
 
     private func reactivatePreviousFrontmostApplication() {
-        let triggerWindow = triggerWindow
+        let focusTarget = RememberedFocusTarget(
+            window: triggerWindow,
+            processIdentifier: previousFrontmostApplicationPID,
+            bundleIdentifier: previousFrontmostApplicationBundleIdentifier
+        )
 
-        defer {
-            clearRememberedTriggerFocus()
+        clearRememberedTriggerFocus()
+        restoreFocus(focusTarget)
+
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 180_000_000)
+            self?.restoreFocus(focusTarget)
         }
+    }
 
-        if let previousFrontmostApplicationPID,
-           let application = NSRunningApplication(processIdentifier: previousFrontmostApplicationPID) {
-            application.activate()
-            restoreTriggerWindow(triggerWindow)
+    private func restoreFocus(_ target: RememberedFocusTarget) {
+        let currentApplication = NSRunningApplication.current
+        if target.processIdentifier == currentApplication.processIdentifier {
+            currentApplication.unhide()
+            currentApplication.activate(options: [.activateAllWindows])
+            NSApp.activate()
+            restoreTriggerWindow(target.window)
             return
         }
 
-        guard let previousFrontmostApplicationBundleIdentifier else {
-            restoreTriggerWindow(triggerWindow)
+        if let processIdentifier = target.processIdentifier,
+           let application = NSRunningApplication(processIdentifier: processIdentifier) {
+            application.unhide()
+            application.activate(options: [.activateAllWindows])
+            restoreTriggerWindow(target.window)
             return
         }
 
-        NSRunningApplication.runningApplications(withBundleIdentifier: previousFrontmostApplicationBundleIdentifier)
-            .first?
-            .activate()
-        restoreTriggerWindow(triggerWindow)
+        if let bundleIdentifier = target.bundleIdentifier {
+            if let application = NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier).first {
+                application.unhide()
+                application.activate(options: [.activateAllWindows])
+            }
+        }
+
+        restoreTriggerWindow(target.window)
     }
 
     private func restoreTriggerWindow(_ window: NSWindow?) {
@@ -274,6 +293,12 @@ public final class FloatingPermissionsController: ObservableObject {
         isSettingsFrontmost =
             NSWorkspace.shared.frontmostApplication?.bundleIdentifier == systemSettingsBundleIdentifier
     }
+}
+
+private struct RememberedFocusTarget {
+    let window: NSWindow?
+    let processIdentifier: pid_t?
+    let bundleIdentifier: String?
 }
 
 private extension Array where Element == URL {
