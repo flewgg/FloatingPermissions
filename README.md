@@ -44,7 +44,7 @@ still approve permissions through Apple's System Settings UI.
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/flewgg/FloatingPermissions.git", from: "0.1.1")
+    .package(url: "https://github.com/flewgg/FloatingPermissions.git", from: "0.2.0")
 ]
 ```
 
@@ -217,6 +217,13 @@ The `Example` folder contains a small macOS app with buttons for the supported
 permission panes.
 
 Open `Example/Example.xcodeproj` in Xcode and run the `Example` scheme.
+
+## Acknowledgements
+
+FloatingPermissions takes inspiration from these open-source projects:
+
+- [PermissionFlow](https://github.com/jaywcjlove/PermissionFlow) for macOS permission guidance patterns.
+- [permiso](https://github.com/zats/permiso) for compact floating permission assistant UI ideas.
 
 ## Tests
 

@@ -2,10 +2,10 @@
 
 All notable changes to FloatingPermissions will be documented in this file.
 
-## Unreleased
+## 0.2.0 - 2026-04-24
 
-- Added Permiso-style floating guide panel.
-- Added PermissionFlow-style close and Settings header controls.
+- Added compact floating guide panel.
+- Added close and Settings header controls.
 - Added System Settings window stabilization before showing the guide.
 - Added permission-resolution polling so the guide closes when permission is granted.
 - Added public open-source documentation.
