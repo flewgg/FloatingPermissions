@@ -22,7 +22,6 @@ final class FloatingDropPanel: NSPanel {
     private let animationDuration: TimeInterval = 0.72
     private let animationResponse: Double = 0.72
     private let initialAlpha: CGFloat = 0.9
-    private let minimumLaunchScale: CGFloat = 0.58
     private var launchTimer: Timer?
     private var launchStartTime: CFTimeInterval = 0
     private var launchFromFrame = NSRect.zero
@@ -97,8 +96,8 @@ final class FloatingDropPanel: NSPanel {
         stopLaunchAnimation()
         isAnimatingLaunch = false
         alphaValue = 1
-        setContentSize(CGSize(width: frame.width, height: measuredPanelHeight(for: frame.width)))
-        setFrame(launchSourceFrame(for: sourceFrameInScreen), display: false)
+        let size = CGSize(width: frame.width, height: measuredPanelHeight(for: frame.width))
+        setFrame(launchSourceFrame(for: sourceFrameInScreen, size: size), display: false)
         orderFrontRegardless()
     }
 
@@ -117,7 +116,7 @@ final class FloatingDropPanel: NSPanel {
         }
 
         isAnimatingLaunch = true
-        launchFromFrame = launchSourceFrame(for: sourceFrameInScreen)
+        launchFromFrame = launchSourceFrame(for: sourceFrameInScreen, size: targetFrame.size)
         launchToFrame = targetFrame
         launchStartTime = CACurrentMediaTime()
         alphaValue = initialAlpha
@@ -153,8 +152,8 @@ final class FloatingDropPanel: NSPanel {
         let target = targetFrame(for: settingsFrame)
         if isAnimatingLaunch {
             // Tracking updates can arrive during the launch. Updating the final
-            // destination preserves the motion instead of abruptly snapping.
-            launchToFrame = target
+            // destination preserves the motion without resizing mid-flight.
+            launchToFrame = CGRect(origin: target.origin, size: launchFromFrame.size)
             return
         }
 
@@ -210,18 +209,14 @@ final class FloatingDropPanel: NSPanel {
     }
 
     /// Builds the starting frame for the launch animation around the source UI
-    /// element that initiated the permission flow.
-    private func launchSourceFrame(for sourceFrameInScreen: CGRect) -> CGRect {
-        let launchSize = CGSize(
-            width: max(sourceFrameInScreen.width, frame.width * minimumLaunchScale),
-            height: max(sourceFrameInScreen.height, frame.height * minimumLaunchScale)
-        )
+    /// element while keeping the final panel size from the first visible frame.
+    private func launchSourceFrame(for sourceFrameInScreen: CGRect, size: CGSize) -> CGRect {
         let center = CGPoint(x: sourceFrameInScreen.midX, y: sourceFrameInScreen.midY)
         return CGRect(
-            x: center.x - (launchSize.width * 0.5),
-            y: center.y - (launchSize.height * 0.5),
-            width: launchSize.width,
-            height: launchSize.height
+            x: center.x - (size.width * 0.5),
+            y: center.y - (size.height * 0.5),
+            width: size.width,
+            height: size.height
         )
     }
 
@@ -264,16 +259,11 @@ final class FloatingDropPanel: NSPanel {
         return min(max(progress, 0), 1)
     }
 
-    /// Interpolates the animated frame along a quadratic Bezier path between
-    /// the source and destination rectangles for a softer "fly in" effect.
+    /// Moves the animated frame along a quadratic Bezier path without resizing
+    /// the window, which keeps the material and SwiftUI content stable.
     private func curvedFrame(from: CGRect, to: CGRect, progress: CGFloat) -> CGRect {
         // A quadratic Bezier curve gives the panel a softer "fly to target"
         // motion than a straight linear interpolation.
-        let size = CGSize(
-            width: from.width + ((to.width - from.width) * progress),
-            height: from.height + ((to.height - from.height) * progress)
-        )
-
         let startCenter = CGPoint(x: from.midX, y: from.midY)
         let endCenter = CGPoint(x: to.midX, y: to.midY)
         let midpoint = CGPoint(
@@ -290,10 +280,10 @@ final class FloatingDropPanel: NSPanel {
         )
 
         return CGRect(
-            x: center.x - (size.width * 0.5),
-            y: center.y - (size.height * 0.5),
-            width: size.width,
-            height: size.height
+            x: center.x - (from.width * 0.5),
+            y: center.y - (from.height * 0.5),
+            width: from.width,
+            height: from.height
         )
     }
 
