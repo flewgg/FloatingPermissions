@@ -106,20 +106,86 @@ final class AppDragSourceView: NSView, NSDraggingSource {
         // close to a Finder-originated file drag.
         let writer = AppBundlePasteboardWriter(url: url)
         let draggingItem = NSDraggingItem(pasteboardWriter: writer)
-        let icon = NSWorkspace.shared.icon(forFile: url.path)
-        icon.size = NSSize(width: 56, height: 56)
+        let dragImage = AppDragPreviewImage.make(for: url)
         let dragPoint = convert(event.locationInWindow, from: nil)
         let dragFrame = NSRect(
             x: dragPoint.x - 28,
-            y: dragPoint.y - 28,
-            width: 56,
-            height: 56
+            y: dragPoint.y - (dragImage.size.height * 0.5),
+            width: dragImage.size.width,
+            height: dragImage.size.height
         )
-        draggingItem.setDraggingFrame(dragFrame, contents: icon)
+        draggingItem.setDraggingFrame(dragFrame, contents: dragImage)
 
         let session = beginDraggingSession(with: [draggingItem], event: event, source: self)
         session.animatesToStartingPositionsOnCancelOrFail = true
         session.draggingFormation = .none
+    }
+}
+
+private enum AppDragPreviewImage {
+    private static let iconSize: CGFloat = 40
+    private static let horizontalPadding: CGFloat = 10
+    private static let verticalPadding: CGFloat = 8
+    private static let textSpacing: CGFloat = 8
+    private static let maxTextWidth: CGFloat = 180
+
+    static func make(for url: URL) -> NSImage {
+        let displayName = FileManager.default.displayName(atPath: url.path)
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.lineBreakMode = .byTruncatingMiddle
+
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 13, weight: .semibold),
+            .foregroundColor: NSColor.labelColor,
+            .paragraphStyle: paragraphStyle
+        ]
+        let measuredTextSize = (displayName as NSString).size(withAttributes: attributes)
+        let textWidth = min(maxTextWidth, max(72, ceil(measuredTextSize.width)))
+        let height = iconSize + (verticalPadding * 2)
+        let width = horizontalPadding + iconSize + textSpacing + textWidth + horizontalPadding
+        let image = NSImage(size: NSSize(width: width, height: height))
+
+        image.lockFocus()
+        NSGraphicsContext.current?.imageInterpolation = .high
+
+        let imageRect = NSRect(origin: .zero, size: image.size)
+        NSColor.clear.setFill()
+        imageRect.fill()
+
+        let background = NSBezierPath(roundedRect: imageRect, xRadius: 12, yRadius: 12)
+        NSColor.windowBackgroundColor.withAlphaComponent(0.9).setFill()
+        background.fill()
+        NSColor.separatorColor.withAlphaComponent(0.45).setStroke()
+        background.lineWidth = 1
+        background.stroke()
+
+        let icon = NSWorkspace.shared.icon(forFile: url.path)
+        icon.size = NSSize(width: iconSize, height: iconSize)
+        icon.draw(
+            in: NSRect(
+                x: horizontalPadding,
+                y: verticalPadding,
+                width: iconSize,
+                height: iconSize
+            ),
+            from: .zero,
+            operation: .sourceOver,
+            fraction: 1
+        )
+
+        let textHeight = ceil(measuredTextSize.height)
+        (displayName as NSString).draw(
+            in: NSRect(
+                x: horizontalPadding + iconSize + textSpacing,
+                y: (height - textHeight) * 0.5,
+                width: textWidth,
+                height: textHeight
+            ),
+            withAttributes: attributes
+        )
+
+        image.unlockFocus()
+        return image
     }
 }
 
