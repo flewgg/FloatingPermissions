@@ -1,5 +1,4 @@
 import AppKit
-import CoreGraphics
 import SwiftUI
 
 struct AppDragItemView: NSViewRepresentable {
@@ -21,7 +20,6 @@ struct AppDragItemView: NSViewRepresentable {
 final class AppDragSourceView: NSView, NSDraggingSource {
     private var url: URL
     private let hostingView: NSHostingView<AnyView>
-    private let settingsDropTarget = SystemSettingsDragTarget()
     private var mouseDownPoint: NSPoint?
     private var hasBegunDragging = false
 
@@ -98,8 +96,7 @@ final class AppDragSourceView: NSView, NSDraggingSource {
     }
 
     func draggingSession(_ session: NSDraggingSession, endedAt screenPoint: NSPoint, operation: NSDragOperation) {
-        let completedOperation = settingsDropTarget.contains(screenPoint) ? operation : []
-        onDragStateChange?(false, completedOperation)
+        onDragStateChange?(false, operation)
         mouseDownPoint = nil
         hasBegunDragging = false
     }
@@ -123,66 +120,6 @@ final class AppDragSourceView: NSView, NSDraggingSource {
         let session = beginDraggingSession(with: [draggingItem], event: event, source: self)
         session.animatesToStartingPositionsOnCancelOrFail = true
         session.draggingFormation = .none
-    }
-}
-
-private final class SystemSettingsDragTarget {
-    private let bundleIdentifier = "com.apple.systempreferences"
-
-    func contains(_ screenPoint: NSPoint) -> Bool {
-        guard
-            let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID)
-                as? [[String: Any]]
-        else { return false }
-
-        for window in windows {
-            guard let frame = appKitFrame(for: window), frame.contains(screenPoint) else { continue }
-            guard let ownerPID = window[kCGWindowOwnerPID as String] as? pid_t else { return false }
-            return NSRunningApplication(processIdentifier: ownerPID)?.bundleIdentifier == bundleIdentifier
-        }
-
-        return false
-    }
-
-    private func appKitFrame(for window: [String: Any]) -> CGRect? {
-        let layer = window[kCGWindowLayer as String] as? Int ?? 0
-        let alpha = window[kCGWindowAlpha as String] as? Double ?? 1
-        guard layer == 0, alpha > 0 else { return nil }
-        guard let bounds = window[kCGWindowBounds as String] as? NSDictionary else { return nil }
-        guard let frame = CGRect(dictionaryRepresentation: bounds) else { return nil }
-        return appKitFrame(fromGlobalTopLeftFrame: frame)
-    }
-
-    private func appKitFrame(fromGlobalTopLeftFrame frame: CGRect) -> CGRect? {
-        let screens = NSScreen.screens.compactMap { screen -> (frame: CGRect, cgBounds: CGRect)? in
-            guard
-                let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber
-            else {
-                return nil
-            }
-
-            let displayID = CGDirectDisplayID(number.uint32Value)
-            return (frame: screen.frame, cgBounds: CGDisplayBounds(displayID))
-        }
-
-        let matchedScreen = screens
-            .filter { $0.cgBounds.intersects(frame) }
-            .max { lhs, rhs in
-                lhs.cgBounds.intersection(frame).width * lhs.cgBounds.intersection(frame).height
-                    < rhs.cgBounds.intersection(frame).width * rhs.cgBounds.intersection(frame).height
-            }
-
-        guard let matchedScreen else { return nil }
-
-        let localX = frame.minX - matchedScreen.cgBounds.minX
-        let localY = frame.minY - matchedScreen.cgBounds.minY
-
-        return CGRect(
-            x: matchedScreen.frame.minX + localX,
-            y: matchedScreen.frame.maxY - localY - frame.height,
-            width: frame.width,
-            height: frame.height
-        )
     }
 }
 
