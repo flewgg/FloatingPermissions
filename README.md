@@ -1,30 +1,46 @@
 # FloatingPermissions
 
-FloatingPermissions is a macOS Swift package for guiding users through drag-based privacy permissions in System Settings.
+FloatingPermissions is a macOS Swift package for guiding users through the
+drag-based Privacy & Security permission panes in System Settings.
 
-It opens the target Privacy & Security pane, waits for the System Settings window to appear, and shows a floating helper panel that follows the Settings window. The helper lets the user drag the current app bundle into the permission list.
+It opens the requested pane, waits until the System Settings window is visible,
+and shows a small floating guide panel with the app bundle ready to drag into
+the permission list. The package also exposes permission status helpers so apps
+can decide whether the guide is needed before showing it.
+
+## Features
+
+- SwiftUI button for the common "open permission guide" flow.
+- Controller API for custom onboarding and settings screens.
+- Floating helper panel that follows the System Settings window.
+- App bundle drag item that becomes mouse-transparent while dragging so System Settings receives the drop.
+- Permission status helpers for Accessibility and Input Monitoring.
+- One active guide panel at a time.
+- macOS 14+ only, with no older-platform compatibility code.
 
 ## Requirements
 
-- macOS 14 or later
-- Swift 6
-- Swift Package Manager
+- macOS 14.0 or later
+- Swift 6.3-compatible toolchain
+
+FloatingPermissions is macOS-only. It cannot grant permissions silently; users
+still approve permissions through Apple's System Settings UI.
 
 ## Installation
 
-Add the package in Xcode:
+### Xcode
 
 1. Choose **File > Add Package Dependencies...**
-2. Enter:
+2. Enter the repository URL:
 
    ```text
    https://github.com/flewgg/FloatingPermissions.git
    ```
 
-3. Use version `0.1.1` or newer.
+3. Select the latest release.
 4. Add the `FloatingPermissions` product to your app target.
 
-Or add it to `Package.swift`:
+### Package.swift
 
 ```swift
 dependencies: [
@@ -45,16 +61,17 @@ Then add the product to your target:
 
 ## Supported Permissions
 
-FloatingPermissions currently supports the two drag-based privacy panes used by our apps:
+FloatingPermissions currently supports:
 
 - Accessibility
 - Input Monitoring
 
-The package keeps the permission model intentionally small and modular so more panes can be added later.
+The permission model is intentionally small and modular so the package can add
+more panes later without changing the guide lifecycle.
 
-## SwiftUI Usage
+## Quick Start
 
-Use `FloatingPermissionsButton` when you want a ready-made button:
+Use `FloatingPermissionsButton` when you want a ready-made SwiftUI control:
 
 ```swift
 import FloatingPermissions
@@ -81,9 +98,37 @@ FloatingPermissionsButton(
 )
 ```
 
-## Controller Usage
+## Status Checks
 
-Use `FloatingPermissionsController` directly when your own UI should trigger the flow:
+Check whether the calling app already has permission:
+
+```swift
+let canUseAccessibility = FloatingPermissionPane.accessibility.isGranted
+let canListenForInput = FloatingPermissionPane.inputMonitoring.isGranted
+```
+
+For more detail, read the authorization state:
+
+```swift
+switch FloatingPermissionPane.accessibility.authorizationState {
+case .granted:
+    startFeature()
+case .notGranted:
+    showPermissionGuide()
+case .unknown, .checking:
+    showFallbackState()
+}
+```
+
+The built-in providers use:
+
+- Accessibility: `AXIsProcessTrusted()`
+- Input Monitoring: `IOHIDCheckAccess(kIOHIDRequestTypeListenEvent)`
+
+## Custom UI
+
+Use `FloatingPermissionsController` directly when your app has its own button,
+row, onboarding step, or settings screen.
 
 ```swift
 import FloatingPermissions
@@ -91,18 +136,20 @@ import SwiftUI
 
 @MainActor
 final class PermissionModel: ObservableObject {
-    private let controller = FloatingPermissionsController()
+    private let controller = FloatingPermissions.makeController(
+        configuration: FloatingPermissionsConfiguration(
+            requiredAppURLs: [Bundle.main.bundleURL]
+        )
+    )
 
     func openAccessibility() {
-        controller.authorize(
-            pane: .accessibility,
-            suggestedAppURLs: [Bundle.main.bundleURL]
-        )
+        controller.authorize(pane: .accessibility)
     }
 }
 ```
 
-You can pass a source frame in screen coordinates if you want the helper to animate from the triggering control:
+If you know the triggering control's frame in screen coordinates, pass it to
+animate the helper from that control toward System Settings:
 
 ```swift
 controller.authorize(
@@ -114,7 +161,9 @@ controller.authorize(
 
 ## Configuration
 
-`FloatingPermissionsConfiguration` lets you provide default app bundle URLs and optionally prompt for Accessibility trust so window tracking can use Accessibility notifications immediately:
+`FloatingPermissionsConfiguration` lets you provide default app bundle URLs and
+control whether the package prompts for Accessibility trust to improve window
+tracking.
 
 ```swift
 let configuration = FloatingPermissionsConfiguration(
@@ -125,41 +174,47 @@ let configuration = FloatingPermissionsConfiguration(
 let controller = FloatingPermissionsController(configuration: configuration)
 ```
 
-Window-server tracking works without prompting. Accessibility trust only improves live window move/resize tracking.
+Window-server tracking works without prompting. Accessibility trust only improves
+live System Settings window move and resize tracking.
 
-## Permission Status
+## Custom Status Providers
 
-Check the current permission state for the calling app:
-
-```swift
-let accessibilityGranted = FloatingPermissionPane.accessibility.isGranted
-let inputMonitoringGranted = FloatingPermissionPane.inputMonitoring.isGranted
-```
-
-Use the authorization state when you need more than a boolean:
+The default status providers are registered automatically. Apps can replace a
+provider when they need app-specific behavior:
 
 ```swift
-let accessibilityState = FloatingPermissionPane.accessibility.authorizationState
+import ApplicationServices
+import FloatingPermissions
+
+struct MyAccessibilityStatusProvider: PermissionStatusProviding {
+    var capability: PermissionStatusCapability { .preflightSupported }
+
+    func authorizationState() -> PermissionAuthorizationState {
+        AXIsProcessTrusted() ? .granted : .notGranted
+    }
+}
+
+PermissionStatusRegistry.register(
+    provider: MyAccessibilityStatusProvider(),
+    for: .accessibility
+)
 ```
 
-These checks mirror the guided flow: Accessibility uses `AXIsProcessTrusted()` and Input Monitoring uses `IOHIDCheckAccess(kIOHIDRequestTypeListenEvent)`.
+## Guide Panel Behavior
 
-## Behavior
-
-- Opens System Settings with the correct privacy deeplink.
+- Opens the matching Privacy & Security page in System Settings.
 - Shows the floating helper only after the System Settings window appears and its frame stabilizes.
-- Keeps one active floating helper at a time.
-- Docks a compact material helper inside the System Settings window.
-- Animates the helper from the triggering control toward the Settings window.
-- Tracks the System Settings window and keeps the helper visually attached to it.
-- Makes the helper mouse-transparent while dragging so System Settings can receive the drop.
-- Hides the helper while the TCC prompt resolves, then closes it when permission is granted.
-- Does not force focus back to the app after the helper closes.
-- Uses the compact app row as the drag preview.
+- Docks the helper inside the Settings window's content area.
+- Uses a material background and compact app drag row.
+- Provides a close button that returns focus to the previously frontmost app.
+- Provides a gear button when System Settings is not frontmost, so the user can bring Settings back.
+- Hides the helper while macOS resolves the permission prompt.
+- Closes automatically after the permission status check reports granted.
 
 ## Example App
 
-The `Example` folder contains a small macOS app with buttons for the supported permission panes.
+The `Example` folder contains a small macOS app with buttons for the supported
+permission panes.
 
 Open `Example/Example.xcodeproj` in Xcode and run the `Example` scheme.
 
@@ -171,4 +226,19 @@ Run the package tests with:
 swift test
 ```
 
-The tests cover supported panes, deeplink construction, module identity, and app URL de-duplication.
+The tests cover supported panes, System Settings deeplinks, module identity,
+permission status providers, and app URL de-duplication.
+
+## Limitations
+
+- System Settings is owned by macOS. Apple can change its UI, timing, or drag behavior between releases.
+- FloatingPermissions cannot add an app to a permission list without the user's drag/drop action.
+- The guide text is currently English-only. Apps that need localized copy should build their own UI around `FloatingPermissionsController`.
+- Permission status checks report the current process. Test from a real `.app` bundle when validating TCC behavior.
+
+## License
+
+FloatingPermissions is available under the MIT License. See `LICENSE`.
+
+Some guide-panel and permission-resolution behavior is adapted from other MIT
+licensed projects. See `THIRD_PARTY_NOTICES.md` for details.
