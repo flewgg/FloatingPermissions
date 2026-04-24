@@ -28,6 +28,7 @@ public final class FloatingPermissionsController: ObservableObject {
 
     private var panel: FloatingDropPanel?
     private var pendingLaunchSourceFrame: CGRect?
+    private weak var triggerWindow: NSWindow?
     private var previousFrontmostApplicationPID: pid_t?
     private var previousFrontmostApplicationBundleIdentifier: String?
     private var cancellables = Set<AnyCancellable>()
@@ -68,7 +69,6 @@ public final class FloatingPermissionsController: ObservableObject {
         SystemSettings.open(url: pane.settingsURL)
 
         Self.activeController = self
-        showPanel()
         tracker.startTracking(promptIfNeeded: configuration.promptForAccessibilityTrust)
     }
 
@@ -106,6 +106,8 @@ public final class FloatingPermissionsController: ObservableObject {
 
         if returnToPreviousApp {
             reactivatePreviousFrontmostApplication()
+        } else {
+            clearRememberedTriggerFocus()
         }
     }
 
@@ -142,7 +144,7 @@ public final class FloatingPermissionsController: ObservableObject {
         panel?.setDraggingPassthrough(isDragging)
 
         if isDragging == false, let completedOperation, completedOperation.isEmpty == false {
-            closePanel()
+            closePanel(returnToPreviousApp: true)
         }
     }
 
@@ -170,7 +172,7 @@ public final class FloatingPermissionsController: ObservableObject {
         tracker.onFrameChange = { [weak self] frame in
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                self.presentPanel(self.panel, for: frame)
+                self.showPanel(for: frame)
             }
         }
         tracker.onTrackingEnded = { [weak self] in
@@ -197,28 +199,56 @@ public final class FloatingPermissionsController: ObservableObject {
     }
 
     private func rememberPreviousFrontmostApplication() {
+        triggerWindow = NSApp.keyWindow ?? NSApp.mainWindow
+
         let frontmostApplication = NSWorkspace.shared.frontmostApplication
-        guard frontmostApplication?.bundleIdentifier != systemSettingsBundleIdentifier else { return }
+        guard frontmostApplication?.bundleIdentifier != systemSettingsBundleIdentifier else {
+            previousFrontmostApplicationPID = nil
+            previousFrontmostApplicationBundleIdentifier = nil
+            return
+        }
+
         previousFrontmostApplicationPID = frontmostApplication?.processIdentifier
         previousFrontmostApplicationBundleIdentifier = frontmostApplication?.bundleIdentifier
     }
 
     private func reactivatePreviousFrontmostApplication() {
+        let triggerWindow = triggerWindow
+
         defer {
-            previousFrontmostApplicationPID = nil
-            previousFrontmostApplicationBundleIdentifier = nil
+            clearRememberedTriggerFocus()
         }
 
         if let previousFrontmostApplicationPID,
            let application = NSRunningApplication(processIdentifier: previousFrontmostApplicationPID) {
             application.activate()
+            restoreTriggerWindow(triggerWindow)
             return
         }
 
-        guard let previousFrontmostApplicationBundleIdentifier else { return }
+        guard let previousFrontmostApplicationBundleIdentifier else {
+            restoreTriggerWindow(triggerWindow)
+            return
+        }
+
         NSRunningApplication.runningApplications(withBundleIdentifier: previousFrontmostApplicationBundleIdentifier)
             .first?
             .activate()
+        restoreTriggerWindow(triggerWindow)
+    }
+
+    private func restoreTriggerWindow(_ window: NSWindow?) {
+        guard let window else { return }
+        if window.isMiniaturized {
+            window.deminiaturize(nil)
+        }
+        window.makeKeyAndOrderFront(nil)
+    }
+
+    private func clearRememberedTriggerFocus() {
+        triggerWindow = nil
+        previousFrontmostApplicationPID = nil
+        previousFrontmostApplicationBundleIdentifier = nil
     }
 
     private func presentPanel(_ panel: FloatingDropPanel?, for settingsFrame: CGRect) {
@@ -230,6 +260,14 @@ public final class FloatingPermissionsController: ObservableObject {
         } else {
             panel.snap(to: settingsFrame)
         }
+    }
+
+    private func showPanel(for settingsFrame: CGRect) {
+        if panel == nil {
+            panel = FloatingDropPanel(controller: self)
+        }
+
+        presentPanel(panel, for: settingsFrame)
     }
 
     private func updateFrontmostAppState() {

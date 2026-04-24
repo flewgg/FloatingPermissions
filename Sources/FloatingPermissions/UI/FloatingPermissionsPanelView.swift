@@ -100,13 +100,13 @@ private struct HeaderDirectionIcon: View {
             .foregroundStyle(.tint)
             .phaseAnimator([0.0, 1.0, 0.0]) { content, phase in
                 content
-                    .rotationEffect(.degrees(isDragging ? 0 : -7 + (14 * phase)))
-                    .offset(y: isDragging ? -1.5 * phase : 1 - (3 * phase))
-                    .scaleEffect(isDragging ? 0.96 + (0.16 * phase) : 1)
+                    .rotationEffect(.degrees(isDragging ? 0 : -6 + (12 * phase)))
+                    .offset(y: isDragging ? -1.5 * phase : 1 - (2.5 * phase))
+                    .scaleEffect(isDragging ? 0.98 + (0.1 * phase) : 1)
             } animation: { _ in
                 isDragging
-                    ? .smooth(duration: 0.58)
-                    : .easeInOut(duration: 0.82)
+                    ? .smooth(duration: 0.24)
+                    : .easeInOut(duration: 0.28)
             }
     }
 }
