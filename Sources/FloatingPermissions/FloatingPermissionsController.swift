@@ -18,9 +18,6 @@ public final class FloatingPermissionsController: ObservableObject {
     /// Drives the visibility of the "reopen settings" action.
     @Published var isSettingsFrontmost = false
 
-    /// Drives the header icon animation while the app card is being dragged.
-    @Published var isDraggingApp = false
-
     public var onDrop: ((URL) -> Void)?
 
     private let configuration: FloatingPermissionsConfiguration
@@ -130,7 +127,6 @@ public final class FloatingPermissionsController: ObservableObject {
         _ isDragging: Bool,
         completedOperation: NSDragOperation? = nil
     ) {
-        isDraggingApp = isDragging
         panel?.setDraggingPassthrough(isDragging)
 
         if isDragging == false, let completedOperation, completedOperation.isEmpty == false {

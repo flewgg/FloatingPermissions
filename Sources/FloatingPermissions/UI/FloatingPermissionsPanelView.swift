@@ -30,8 +30,7 @@ struct FloatingPermissionPanelView: View {
 
     /// Keeps the header logic isolated from the drag card layout.
     private var header: some View {
-        HStack(alignment: .top, spacing: 3) {
-            HeaderDirectionIcon(isDragging: controller.isDraggingApp)
+        HStack(alignment: .top, spacing: 6) {
             Text(headerTitle).font(.system(size: 14))
             Spacer()
             HStack(alignment: .top, spacing: 3) {
@@ -87,26 +86,5 @@ struct FloatingPermissionPanelView: View {
     /// Uses the current pane title so each permission can render a specific instruction.
     private var paneDisplayTitle: String {
         controller.currentPane?.displayTitle ?? "Permission"
-    }
-}
-
-private struct HeaderDirectionIcon: View {
-    let isDragging: Bool
-
-    var body: some View {
-        Image(systemName: "arrowshape.up.fill")
-            .font(.system(size: 14, weight: .bold))
-            .symbolRenderingMode(.hierarchical)
-            .foregroundStyle(.tint)
-            .phaseAnimator([0.0, 1.0, 0.0]) { content, phase in
-                content
-                    .rotationEffect(.degrees(isDragging ? 0 : -6 + (12 * phase)))
-                    .offset(y: isDragging ? -1.5 * phase : 1 - (2.5 * phase))
-                    .scaleEffect(isDragging ? 0.98 + (0.1 * phase) : 1)
-            } animation: { _ in
-                isDragging
-                    ? .smooth(duration: 0.24)
-                    : .easeInOut(duration: 0.28)
-            }
     }
 }
