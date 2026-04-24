@@ -127,6 +127,17 @@ let controller = FloatingPermissionsController(configuration: configuration)
 
 Window-server tracking works without prompting. Accessibility trust only improves live window move/resize tracking.
 
+## Permission Status
+
+Check the current permission state for the calling app:
+
+```swift
+let accessibilityGranted = FloatingPermissionPane.accessibility.isGranted
+let inputMonitoringGranted = FloatingPermissionPane.inputMonitoring.isGranted
+```
+
+These checks mirror our app usage: Accessibility uses `AXIsProcessTrusted()` and Input Monitoring uses `CGPreflightListenEventAccess()`.
+
 ## Behavior
 
 - Opens System Settings with the correct privacy deeplink.

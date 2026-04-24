@@ -24,6 +24,13 @@ func supportedPanesStayFocused() {
 }
 
 @Test
+func permissionStatusHelpersAreReachable() {
+    let grantedStates = FloatingPermissionPane.allCases.map(\.isGranted)
+
+    #expect(grantedStates.count == FloatingPermissionPane.allCases.count)
+}
+
+@Test
 @MainActor
 func controllerAcceptsOnlyUniqueAppBundles() {
     let controller = FloatingPermissionsController()
