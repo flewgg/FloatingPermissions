@@ -1,8 +1,6 @@
-#if os(macOS)
 import AppKit
 import SwiftUI
 
-@available(macOS 13.0, *)
 struct AppDragItemView: NSViewRepresentable {
     let url: URL
     let onDragStateChange: (Bool) -> Void
@@ -19,7 +17,6 @@ struct AppDragItemView: NSViewRepresentable {
     }
 }
 
-@available(macOS 13.0, *)
 final class AppDragSourceView: NSView, NSDraggingSource {
     private var url: URL
     private let hostingView: NSHostingView<AnyView>
@@ -126,7 +123,6 @@ final class AppDragSourceView: NSView, NSDraggingSource {
     }
 }
 
-@available(macOS 13.0, *)
 private final class AppBundlePasteboardWriter: NSObject, NSPasteboardWriting {
     private let url: URL
 
@@ -158,7 +154,6 @@ private final class AppBundlePasteboardWriter: NSObject, NSPasteboardWriting {
     }
 }
 
-@available(macOS 13.0, *)
 private struct AppDragCardContent: View {
     let url: URL
 
@@ -192,4 +187,3 @@ private struct AppDragCardContent: View {
         )
     }
 }
-#endif

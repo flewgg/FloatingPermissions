@@ -1,5 +1,3 @@
-#if os(macOS)
-@available(macOS 13.0, *)
 public enum FloatingPermissions {
     /// Creates the object that owns System Settings navigation, window
     /// tracking, and the floating drag panel lifecycle.
@@ -10,4 +8,3 @@ public enum FloatingPermissions {
         FloatingPermissionsController(configuration: configuration)
     }
 }
-#endif

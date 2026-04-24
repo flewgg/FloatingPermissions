@@ -1,9 +1,7 @@
-#if os(macOS)
 import AppKit
 import QuartzCore
 import SwiftUI
 
-@available(macOS 13.0, *)
 @MainActor
 final class FloatingDropPanel: NSPanel {
     private weak var panelController: FloatingPermissionsController?
@@ -36,9 +34,7 @@ final class FloatingDropPanel: NSPanel {
         let panelView = Self.makePanelView(controller: controller)
         hostingView = NSHostingView(rootView: panelView)
         sizingView = NSHostingView(rootView: panelView)
-        if #available(macOS 13.3, *) {
-            hostingView.sizingOptions = []
-        }
+        hostingView.sizingOptions = []
         super.init(
             contentRect: CGRect(origin: .zero, size: CGSize(width: initialPanelWidth, height: minimumPanelHeight)),
             styleMask: [.borderless, .nonactivatingPanel],
@@ -306,4 +302,3 @@ final class FloatingDropPanel: NSPanel {
         return AnyView(view)
     }
 }
-#endif

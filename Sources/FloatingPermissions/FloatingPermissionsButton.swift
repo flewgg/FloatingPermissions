@@ -1,8 +1,6 @@
-#if os(macOS)
 import AppKit
 import SwiftUI
 
-@available(macOS 13.0, *)
 public struct FloatingPermissionsButton: View {
     @StateObject private var controller: FloatingPermissionsController
 
@@ -44,4 +42,3 @@ public struct FloatingPermissionsButton: View {
         return CGRect(x: mouse.x - 16, y: mouse.y - 16, width: 32, height: 32)
     }
 }
-#endif

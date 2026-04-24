@@ -1,7 +1,5 @@
-#if os(macOS)
 import SwiftUI
 
-@available(macOS 13.0, *)
 struct FloatingPermissionPanelView: View {
     @ObservedObject var controller: FloatingPermissionsController
 
@@ -92,7 +90,6 @@ struct FloatingPermissionPanelView: View {
     }
 }
 
-@available(macOS 13.0, *)
 private struct HeaderDirectionIcon: View {
     let isDragging: Bool
 
@@ -116,7 +113,7 @@ private struct HeaderDirectionIcon: View {
             .onAppear {
                 wigglePhase = true
             }
-            .onChange(of: isDragging) { dragging in
+            .onChange(of: isDragging) { _, dragging in
                 if dragging {
                     scalePhase = true
                     wigglePhase = false
@@ -127,4 +124,3 @@ private struct HeaderDirectionIcon: View {
             }
     }
 }
-#endif

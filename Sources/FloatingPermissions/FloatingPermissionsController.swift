@@ -1,9 +1,7 @@
-#if os(macOS)
 import AppKit
 import Combine
 import SwiftUI
 
-@available(macOS 13.0, *)
 @MainActor
 public final class FloatingPermissionsController: ObservableObject {
     /// The package exposes a single active floating panel at a time so opening
@@ -206,14 +204,14 @@ public final class FloatingPermissionsController: ObservableObject {
 
         if let previousFrontmostApplicationPID,
            let application = NSRunningApplication(processIdentifier: previousFrontmostApplicationPID) {
-            application.activate(options: [.activateIgnoringOtherApps])
+            application.activate()
             return
         }
 
         guard let previousFrontmostApplicationBundleIdentifier else { return }
         NSRunningApplication.runningApplications(withBundleIdentifier: previousFrontmostApplicationBundleIdentifier)
             .first?
-            .activate(options: [.activateIgnoringOtherApps])
+            .activate()
     }
 
     private func presentPanel(_ panel: FloatingDropPanel?, for settingsFrame: CGRect) {
@@ -233,7 +231,6 @@ public final class FloatingPermissionsController: ObservableObject {
     }
 }
 
-@available(macOS 13.0, *)
 private extension Array where Element == URL {
     /// Normalizes and de-duplicates `.app` bundle URLs.
     func uniqueAppURLs() -> [URL] {
@@ -251,4 +248,3 @@ private extension Array where Element == URL {
         contains(where: { $0.standardizedFileURL.path == url.standardizedFileURL.path })
     }
 }
-#endif
