@@ -25,9 +25,21 @@ func supportedPanesStayFocused() {
 
 @Test
 func permissionStatusHelpersAreReachable() {
+    let authorizationStates = FloatingPermissionPane.allCases.map(\.authorizationState)
     let grantedStates = FloatingPermissionPane.allCases.map(\.isGranted)
 
+    #expect(authorizationStates.count == FloatingPermissionPane.allCases.count)
     #expect(grantedStates.count == FloatingPermissionPane.allCases.count)
+}
+
+@Test
+func statusProvidersMatchSupportedPanes() {
+    for pane in FloatingPermissionPane.allCases {
+        let provider = PermissionStatusRegistry.provider(for: pane)
+
+        #expect(provider.capability == .preflightSupported)
+        #expect([.granted, .notGranted].contains(provider.authorizationState()))
+    }
 }
 
 @Test

@@ -136,6 +136,12 @@ let accessibilityGranted = FloatingPermissionPane.accessibility.isGranted
 let inputMonitoringGranted = FloatingPermissionPane.inputMonitoring.isGranted
 ```
 
+Use the authorization state when you need more than a boolean:
+
+```swift
+let accessibilityState = FloatingPermissionPane.accessibility.authorizationState
+```
+
 These checks mirror our app usage: Accessibility uses `AXIsProcessTrusted()` and Input Monitoring uses `CGPreflightListenEventAccess()`.
 
 ## Behavior

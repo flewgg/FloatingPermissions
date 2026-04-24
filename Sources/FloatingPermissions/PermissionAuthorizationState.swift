@@ -1,0 +1,12 @@
+import Foundation
+
+public enum PermissionAuthorizationState: String, CaseIterable, Codable, Sendable {
+    /// Permission is granted and ready to use.
+    case granted
+    /// Permission is explicitly not granted.
+    case notGranted
+    /// Permission status cannot be determined reliably.
+    case unknown
+    /// Permission status check is in progress.
+    case checking
+}
