@@ -28,9 +28,6 @@ public final class FloatingPermissionsController: ObservableObject {
 
     private var panel: FloatingDropPanel?
     private var pendingLaunchSourceFrame: CGRect?
-    private var triggerWindow: NSWindow?
-    private var previousFrontmostApplicationPID: pid_t?
-    private var previousFrontmostApplicationBundleIdentifier: String?
     private var cancellables = Set<AnyCancellable>()
 
     public init(configuration: FloatingPermissionsConfiguration = .init()) {
@@ -62,7 +59,6 @@ public final class FloatingPermissionsController: ObservableObject {
     ) {
         closeOtherActivePanelIfNeeded()
 
-        rememberPreviousFrontmostApplication()
         currentPane = pane
         pendingLaunchSourceFrame = sourceFrameInScreen
         mergeDroppedApps(with: suggestedAppURLs)
@@ -94,7 +90,7 @@ public final class FloatingPermissionsController: ObservableObject {
         }
     }
 
-    public func closePanel(returnToPreviousApp: Bool = false) {
+    public func closePanel() {
         tracker.stopTracking()
         panel?.close()
         panel = nil
@@ -102,12 +98,6 @@ public final class FloatingPermissionsController: ObservableObject {
 
         if Self.activeController === self {
             Self.activeController = nil
-        }
-
-        if returnToPreviousApp {
-            reactivatePreviousFrontmostApplication()
-        } else {
-            clearRememberedTriggerFocus()
         }
     }
 
@@ -144,7 +134,7 @@ public final class FloatingPermissionsController: ObservableObject {
         panel?.setDraggingPassthrough(isDragging)
 
         if isDragging == false, let completedOperation, completedOperation.isEmpty == false {
-            closePanel(returnToPreviousApp: true)
+            closePanel()
         }
     }
 
@@ -198,78 +188,6 @@ public final class FloatingPermissionsController: ObservableObject {
         }
     }
 
-    private func rememberPreviousFrontmostApplication() {
-        triggerWindow = NSApp.keyWindow ?? NSApp.mainWindow
-
-        let frontmostApplication = NSWorkspace.shared.frontmostApplication
-        guard frontmostApplication?.bundleIdentifier != systemSettingsBundleIdentifier else {
-            previousFrontmostApplicationPID = nil
-            previousFrontmostApplicationBundleIdentifier = nil
-            return
-        }
-
-        previousFrontmostApplicationPID = frontmostApplication?.processIdentifier
-        previousFrontmostApplicationBundleIdentifier = frontmostApplication?.bundleIdentifier
-    }
-
-    private func reactivatePreviousFrontmostApplication() {
-        let focusTarget = RememberedFocusTarget(
-            window: triggerWindow,
-            processIdentifier: previousFrontmostApplicationPID,
-            bundleIdentifier: previousFrontmostApplicationBundleIdentifier
-        )
-
-        clearRememberedTriggerFocus()
-        restoreFocus(focusTarget)
-
-        Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: 180_000_000)
-            self?.restoreFocus(focusTarget)
-        }
-    }
-
-    private func restoreFocus(_ target: RememberedFocusTarget) {
-        let currentApplication = NSRunningApplication.current
-        if target.processIdentifier == currentApplication.processIdentifier {
-            currentApplication.unhide()
-            currentApplication.activate(options: [.activateAllWindows])
-            NSApp.activate()
-            restoreTriggerWindow(target.window)
-            return
-        }
-
-        if let processIdentifier = target.processIdentifier,
-           let application = NSRunningApplication(processIdentifier: processIdentifier) {
-            application.unhide()
-            application.activate(options: [.activateAllWindows])
-            restoreTriggerWindow(target.window)
-            return
-        }
-
-        if let bundleIdentifier = target.bundleIdentifier {
-            if let application = NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier).first {
-                application.unhide()
-                application.activate(options: [.activateAllWindows])
-            }
-        }
-
-        restoreTriggerWindow(target.window)
-    }
-
-    private func restoreTriggerWindow(_ window: NSWindow?) {
-        guard let window else { return }
-        if window.isMiniaturized {
-            window.deminiaturize(nil)
-        }
-        window.makeKeyAndOrderFront(nil)
-    }
-
-    private func clearRememberedTriggerFocus() {
-        triggerWindow = nil
-        previousFrontmostApplicationPID = nil
-        previousFrontmostApplicationBundleIdentifier = nil
-    }
-
     private func presentPanel(_ panel: FloatingDropPanel?, for settingsFrame: CGRect) {
         guard let panel else { return }
 
@@ -293,12 +211,6 @@ public final class FloatingPermissionsController: ObservableObject {
         isSettingsFrontmost =
             NSWorkspace.shared.frontmostApplication?.bundleIdentifier == systemSettingsBundleIdentifier
     }
-}
-
-private struct RememberedFocusTarget {
-    let window: NSWindow?
-    let processIdentifier: pid_t?
-    let bundleIdentifier: String?
 }
 
 private extension Array where Element == URL {

@@ -47,7 +47,7 @@ struct FloatingPermissionPanelView: View {
                     .buttonStyle(.borderless)
                 }
                 Button {
-                    controller.closePanel(returnToPreviousApp: true)
+                    controller.closePanel()
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 18, weight: .semibold))
