@@ -86,8 +86,7 @@ final class AppDragSourceView: NSView, NSDraggingSource {
     }
 
     func draggingSession(_ session: NSDraggingSession, sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation {
-        guard context == .outsideApplication else { return [] }
-        return settingsDropTarget.contains(session.draggingLocation) ? .copy : []
+        .copy
     }
 
     func ignoreModifierKeys(for session: NSDraggingSession) -> Bool {
